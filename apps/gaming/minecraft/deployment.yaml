@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minecraft
+  namespace: gaming
+spec:
+  replicas: 1  # never scale above 1 — world corruption risk
+  selector:
+    matchLabels:
+      app: minecraft
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: minecraft
+    spec:
+      initContainers:
+        - name: modpack-installer
+          image: alpine:latest
+          command:
+            - sh
+            - -c
+            - |
+              if [ ! -f /data/.modpack-installed ]; then
+                echo "Extracting server pack..."
+                apk add --no-cache unzip
+                unzip -o /modpack/Homestead1.3.4_server_pack.zip -d /tmp/modpack
+                cp -r /tmp/modpack/Homestead1.3.4/. /data/
+                rm -rf /tmp/modpack
+                chown -R 1000:1000 /data
+                chmod -R u+w /data
+                touch /data/.modpack-installed
+                echo "Done."
+              else
+                echo "Server pack already installed, skipping."
+              fi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: modpack
+              mountPath: /modpack
+              readOnly: true
+
+      containers:
+        - name: minecraft
+          image: itzg/minecraft-server:java21
+          env:
+            - name: EULA
+              value: "TRUE"
+            - name: TYPE
+              value: FABRIC
+            - name: VERSION
+              value: "1.20.1"
+            - name: FABRIC_LOADER_VERSION
+              value: "0.18.4"
+            - name: MEMORY
+              value: "12G"
+            - name: JVM_OPTS
+              value: >-
+                -XX:+UseG1GC
+                -XX:+ParallelRefProcEnabled
+                -XX:MaxGCPauseMillis=200
+                -XX:+UnlockExperimentalVMOptions
+                -XX:+DisableExplicitGC
+                -XX:+AlwaysPreTouch
+                -XX:G1NewSizePercent=30
+                -XX:G1MaxNewSizePercent=40
+                -XX:G1HeapRegionSize=8M
+                -XX:G1ReservePercent=20
+                -XX:G1HeapWastePercent=5
+                -XX:G1MixedGCCountTarget=4
+                -XX:InitiatingHeapOccupancyPercent=15
+                -XX:G1MixedGCLiveThresholdPercent=90
+                -XX:G1RSetUpdatingPauseTimePercent=5
+                -XX:SurvivorRatio=32
+                -XX:+PerfDisableSharedMem
+                -XX:MaxTenuringThreshold=1
+            - name: CF_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minecraft-secrets
+                  key: CF_API_KEY
+            - name: CURSEFORGE_FILES
+              value: "distant-horizons:7977106"
+            - name: SIMULATION_DISTANCE
+              value: "6"
+            - name: VIEW_DISTANCE
+              value: "10"
+          ports:
+            - containerPort: 25565
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: modpack
+              mountPath: /modpack
+              readOnly: true
+          resources:
+            requests:
+              memory: 12Gi
+              cpu: "2"
+            limits:
+              memory: 14Gi
+              cpu: "6"
+
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minecraft-data
+        - name: modpack
+          hostPath:
+            path: /opt/minecraft
+            type: Directory
