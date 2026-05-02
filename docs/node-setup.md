@@ -74,7 +74,16 @@ Host homelab
   UseKeychain yes
   AddKeysToAgent yes
   IdentityFile ~/.ssh/id_ed25519
+
+Host homelab-ts
+  HostName 100.121.57.120
+  User danicajiao
+  UseKeychain yes
+  AddKeysToAgent yes
+  IdentityFile ~/.ssh/id_ed25519
 ```
+
+Use `homelab` on the local network, `homelab-ts` from anywhere via Tailscale.
 
 ### Key
 
@@ -95,14 +104,18 @@ Host homelab
 sudo ufw status
 ```
 
-| Port  | Protocol | Purpose          |
-|-------|----------|------------------|
-| 22    | TCP      | SSH              |
-| 6443  | TCP      | Kubernetes API   |
-| 25565 | TCP      | Minecraft Java   |
+| Port  | Protocol | Interface   | Purpose          |
+|-------|----------|-------------|------------------|
+| 22    | TCP      | Anywhere    | SSH              |
+| 6443  | TCP      | tailscale0  | Kubernetes API   |
+| 25565 | TCP      | Anywhere    | Minecraft Java   |
 
 ```bash
-sudo ufw allow <port>/<protocol>
+# Open a port to all interfaces
+sudo ufw allow <port>/tcp
+
+# Open a port to Tailscale only
+sudo ufw allow in on tailscale0 to any port <port> proto tcp
 ```
 
 ---
@@ -112,6 +125,14 @@ sudo ufw allow <port>/<protocol>
 - **Version:** v1.34.6+k3s1
 - **Type:** Single-node cluster
 - **Role:** control-plane
+- **Config:** `/etc/rancher/k3s/config.yaml`
+
+```yaml
+tls-san:
+  - 100.121.57.120
+```
+
+The Tailscale IP is added as a TLS SAN so kubectl can connect via Tailscale without a certificate error.
 
 ### System pods
 
@@ -123,10 +144,66 @@ sudo ufw allow <port>/<protocol>
 | metrics-server         | kube-system | Resource metrics    |
 | svclb-traefik          | kube-system | Load balancer       |
 
-### kubeconfig (on the node)
+---
+
+## Tailscale
+
+| Device              | Tailscale IP    |
+|---------------------|-----------------|
+| homelab (node)      | 100.121.57.120  |
+| Daniel's MacBook Pro| 100.125.85.98   |
+
+### Node install
 
 ```bash
-sudo cat /etc/rancher/k3s/k3s.yaml
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
 ```
 
-See the main [README](../README.md) for how to set up `kubectl` on your Mac.
+### Mac install
+
+Use the standalone pkg from tailscale.com/download (not Homebrew or App Store).
+
+### iPhone / iPad install
+
+Install the Tailscale app from the App Store and sign in with the same account.
+
+---
+
+## kubectl (on Mac)
+
+### One-time setup
+
+With Tailscale connected, pull the kubeconfig from the node and rewrite the server address:
+
+```bash
+ssh homelab-ts "sudo cat /etc/rancher/k3s/k3s.yaml" \
+  | sed 's/127.0.0.1/100.121.57.120/' \
+  > ~/.kube/config
+chmod 600 ~/.kube/config
+```
+
+This works without a password prompt because `danicajiao` has passwordless sudo configured. To set this up on a fresh node:
+
+```bash
+sudo visudo -f /etc/sudoers.d/danicajiao
+```
+
+Add:
+
+```
+danicajiao ALL=(ALL) NOPASSWD: ALL
+```
+
+### Verify
+
+```bash
+kubectl get nodes
+```
+
+Should return the `homelab` node as `Ready`.
+
+### Notes
+
+- `~/.kube/config` is the default kubeconfig path — no `KUBECONFIG` env var needed.
+- kubectl connects to `https://100.121.57.120:6443` via Tailscale, so it works on any network.
