@@ -40,10 +40,14 @@ homelab/
 Apply the Kustomize tree directly. This installs Argo CD imperatively, the same way `argocd-self` will manage it from this point forward.
 
 ```bash
-kubectl apply -k infra/argocd
+kubectl apply -k infra/argocd --server-side --force-conflicts
 ```
 
-Expected output: a long list of `created` lines for CRDs, ServiceAccounts, ClusterRoles, Deployments, etc. Some `unable to recognize` warnings on the first run are normal — they're for resources that depend on CRDs that get installed in the same apply. Re-running the command resolves them, but Kustomize's apply order usually handles this on the first pass.
+`--server-side` is **required** here. Argo CD's `applicationsets.argoproj.io` CRD has annotations larger than the 262KB limit on client-side apply, and the install will fail with `metadata.annotations: Too long` if you omit it. Server-side apply handles the large CRD correctly and is also closer to how Argo CD itself reconciles resources, so subsequent self-management has no field-ownership churn.
+
+`--force-conflicts` is harmless on a clean install and lets you re-run idempotently if a previous attempt partially applied client-side.
+
+Expected output: a long list of `serverside-applied` lines for CRDs, ServiceAccounts, ClusterRoles, Deployments, etc.
 
 Wait for pods to be ready:
 
@@ -224,13 +228,22 @@ This is a Phase 5+ concern.
 
 ## Troubleshooting
 
-### Some resources fail to apply on first bootstrap
+### `metadata.annotations: Too long: may not be more than 262144 bytes`
 
-Argo CD's install.yaml registers CRDs and uses them in the same apply. Kubernetes usually handles this, but if not:
+You ran the bootstrap without `--server-side`. Re-run with the correct flags:
 
 ```bash
-# Re-run the apply — once CRDs are registered, dependent resources go through.
-kubectl apply -k infra/argocd
+kubectl apply -k infra/argocd --server-side --force-conflicts
+```
+
+The Argo CD `applicationsets.argoproj.io` CRD's `last-applied-configuration` annotation exceeds Kubernetes' client-side apply limit. Server-side apply doesn't use that annotation. See the [Argo CD install docs](https://argo-cd.readthedocs.io/en/stable/operator-manual/installation/) for context.
+
+### Some resources fail to apply on first bootstrap
+
+If a transient error leaves the install in a partial state, re-run idempotently:
+
+```bash
+kubectl apply -k infra/argocd --server-side --force-conflicts
 ```
 
 ### `argocd-server` is `CrashLoopBackOff`
