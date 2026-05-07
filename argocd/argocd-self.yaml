@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: argocd
+    namespace: argocd
+    finalizers:
+        - resources-finalizer.argocd.argoproj.io
+spec:
+    project: default
+    source:
+        repoURL: https://github.com/danicajiao/homelab.git
+        targetRevision: main
+        path: infra/argocd
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: argocd
+    # Self-management is sensitive. Auto-heal drift, but never auto-prune —
+    # losing a resource from the kustomization should not silently delete it
+    # from the cluster (that would happily remove CRDs and break everything).
+    # Pruning, when needed, is a manual `argocd app sync argocd --prune`.
+    syncPolicy:
+        automated:
+            prune: false
+            selfHeal: true
+        syncOptions:
+            - ServerSideApply=true

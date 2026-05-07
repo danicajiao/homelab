@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Argo CD install.
+#
+# This kustomization is the source of truth for what's running in the `argocd`
+# namespace. After the initial manual bootstrap (kubectl apply of these same
+# manifests), Argo CD reconciles its own install via the `argocd-self`
+# Application in `homelab/argocd/argocd-self.yaml`.
+#
+# Pin the Argo CD version explicitly. Bumping happens via PR — update the URL,
+# verify `kustomize build infra/argocd` renders cleanly, merge.
+#
+# Latest releases: https://github.com/argoproj/argo-cd/releases
+
+namespace: argocd
+
+resources:
+    - namespace.yaml
+    - https://raw.githubusercontent.com/argoproj/argo-cd/v3.4.1/manifests/install.yaml
