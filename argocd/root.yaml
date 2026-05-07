@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: root
+    namespace: argocd
+    finalizers:
+        - resources-finalizer.argocd.argoproj.io
+spec:
+    project: default
+    # The root Application points at the `argocd/` directory itself. The
+    # kustomization.yaml in that directory lists every other Application,
+    # making this an "app of apps" — apply this manifest once and Argo CD
+    # creates and reconciles all child Applications.
+    source:
+        repoURL: https://github.com/danicajiao/homelab.git
+        targetRevision: main
+        path: argocd
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: argocd
+    syncPolicy:
+        automated:
+            prune: true
+            selfHeal: true
+        syncOptions:
+            - CreateNamespace=true

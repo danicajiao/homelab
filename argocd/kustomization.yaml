@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Lists every Argo CD Application managed by the root app-of-apps.
+# Add a new entry here when you add a new Application manifest.
+
+resources:
+    - argocd-self.yaml
+    - apps-cove-staging.yaml
+    - apps-cove-prod.yaml

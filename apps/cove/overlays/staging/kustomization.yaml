@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Staging overlay — every base resource is rewritten into the cove-staging
+# namespace. Env-specific patches (image tags, replica counts, resource
+# limits) belong here too as the app grows.
+
+namespace: cove-staging
+
+resources:
+    - ../../base
