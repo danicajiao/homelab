@@ -13,6 +13,12 @@
 
 - K3s cluster reachable via `kubectl`. Verify: `kubectl cluster-info`
 - `kubectl` >= 1.27 (for stable Kustomize support via `-k`)
+- This `homelab` repo must be **readable by Argo CD without credentials**. Either:
+    - The repo is **public** (recommended for homelab setups — manifests describe what runs, never what the secrets are; real secrets live in External Secrets Operator pulling from GCP Secret Manager). Make it public with: `gh repo edit danicajiao/homelab --visibility public --accept-visibility-change-consequences`.
+    - Or add a GitHub PAT as a `repository`-typed Secret in the `argocd` namespace ([Argo CD docs](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#repositories)). Most homelab projects skip this and go public.
+
+  Without one of these, root sync fails with `failed to list refs: authentication required: Repository not found`.
+- The bootstrap manifests in this repo (`infra/argocd/`, `argocd/`, `apps/cove/`) must be on the branch `root.yaml` watches. Default `targetRevision` is `main`, so **merge the bootstrap PR before applying `root.yaml`** in Step 2 — otherwise root will sync `Unknown` because the path doesn't exist on `main` yet.
 - A few minutes — the install pulls roughly a dozen container images on first sync
 
 ## Repo layout (relevant pieces)
@@ -58,6 +64,8 @@ kubectl -n argocd get pods -w
 You should end up with `Running` and `Ready 1/1` for `argocd-server`, `argocd-repo-server`, `argocd-application-controller`, `argocd-applicationset-controller`, `argocd-notifications-controller`, `argocd-redis`, and `argocd-dex-server`. Use Ctrl-C once everything is ready.
 
 ## Step 2 — Apply the app-of-apps root
+
+> **Precondition:** the bootstrap PR adding `infra/argocd/`, `argocd/`, and `apps/cove/` must already be merged into `main`. `root.yaml` has `targetRevision: main`, so applying it before the manifests are on `main` will leave root in `Unknown` state.
 
 ```bash
 kubectl apply -f argocd/root.yaml
@@ -244,6 +252,32 @@ If a transient error leaves the install in a partial state, re-run idempotently:
 
 ```bash
 kubectl apply -k infra/argocd --server-side --force-conflicts
+```
+
+### `root` is stuck `Unknown` with `failed to list refs: authentication required: Repository not found`
+
+The repo isn't reachable by Argo CD without credentials. Either make `homelab` public:
+
+```bash
+gh repo edit danicajiao/homelab --visibility public --accept-visibility-change-consequences
+```
+
+Or add a GitHub PAT — see Prerequisites above for the link to Argo CD's docs on private-repo credentials.
+
+After fixing, force a refresh:
+
+```bash
+kubectl -n argocd annotate application root \
+    argocd.argoproj.io/refresh=hard --overwrite
+```
+
+### `root` is `Unknown` with a "path not found" or empty-manifest error
+
+The bootstrap manifests aren't on the branch `root.yaml` watches. If you applied `root.yaml` from a feature branch but the manifests aren't yet merged to `main`, root has nothing to reconcile against. Merge the bootstrap PR, then refresh:
+
+```bash
+kubectl -n argocd annotate application root \
+    argocd.argoproj.io/refresh=hard --overwrite
 ```
 
 ### `argocd-server` is `CrashLoopBackOff`
