@@ -72,15 +72,54 @@ spec:
     destination:
         server: https://kubernetes.default.svc
         namespace: garage
-    # Mirror argocd-self / external-secrets / cnpg: auto-heal drift, never
-    # auto-prune. Pruning the StatefulSet or its PVCs would lose every object
-    # in Garage. Manual prune is `argocd app sync garage --prune`.
+    # Three real drift sources surfaced once Argo CD started reconciling
+    # post-install:
     #
-    # No `ignoreDifferences` here. The Garage chart doesn't have a known
-    # webhook-mutates-defaults pattern, and the chart-generated `rpc-secret`
-    # Secret is owned by the chart on first install. If post-install
-    # reconciles surface drift, address it as a follow-up — don't add
-    # speculative ignore rules.
+    # 1. Secret/garage-rpc-secret — the chart generates `rpcSecret` via
+    #    `randAlphaNum` on every render, so the value differs every helm
+    #    template run. With `selfHeal: true` this would rotate the secret
+    #    indefinitely. At replicas=1 RPC is unused so functional impact is
+    #    zero, but the noise is constant. Long-term: externalize via GCP SM
+    #    + ExternalSecret with the chart's `existingSecret` knob.
+    #
+    # 2. StatefulSet/garage volumeClaimTemplates[] — the chart renders
+    #    `apiVersion: v1, kind: PersistentVolumeClaim` on each VCT, but K8s
+    #    strips those during admission (they're implicit for VCTs). Diff
+    #    appears every reconcile.
+    #
+    # 3. ExternalSecret/garage-images-creds — ESO's admission webhook
+    #    auto-fills `conversionStrategy / decodingStrategy / metadataPolicy
+    #    / nullBytePolicy` and `target.deletionPolicy`. The matching rule
+    #    on `argocd/external-secrets.yaml` doesn't apply here —
+    #    `ignoreDifferences` is per-Application. Tech debt: lift this rule
+    #    to the AppProject level so any Application with ExternalSecrets
+    #    inherits it.
+    #
+    # Mirror argocd-self / external-secrets / cnpg on prune/heal: auto-heal
+    # drift, never auto-prune. Pruning the StatefulSet or its PVCs would
+    # lose every object in Garage. Manual prune is
+    # `argocd app sync garage --prune`.
+    ignoreDifferences:
+        - kind: Secret
+          name: garage-rpc-secret
+          namespace: garage
+          jsonPointers:
+              - /data/rpcSecret
+        - group: apps
+          kind: StatefulSet
+          name: garage
+          namespace: garage
+          jqPathExpressions:
+              - .spec.volumeClaimTemplates[].apiVersion
+              - .spec.volumeClaimTemplates[].kind
+        - group: external-secrets.io
+          kind: ExternalSecret
+          jqPathExpressions:
+              - .spec.data[].remoteRef.conversionStrategy
+              - .spec.data[].remoteRef.decodingStrategy
+              - .spec.data[].remoteRef.metadataPolicy
+              - .spec.data[].remoteRef.nullBytePolicy
+              - .spec.target.deletionPolicy
     syncPolicy:
         automated:
             prune: false
@@ -88,3 +127,8 @@ spec:
         syncOptions:
             - ServerSideApply=true
             - CreateNamespace=true
+            # Make selfHeal honor the ignoreDifferences rules above instead
+            # of repeatedly "fixing" the diff back to git state, only for
+            # K8s / the chart / the ESO webhook to mutate it again on the
+            # next reconcile. Same lesson learned in PR #4.
+            - RespectIgnoreDifferences=true
