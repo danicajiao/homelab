@@ -1,0 +1,52 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: cnpg
+    namespace: argocd
+    annotations:
+        # Phase 0 operator install — runs alongside the other foundational
+        # Applications in wave 0. Kept consistent with external-secrets even
+        # though there's no companion config Application to order against yet.
+        argocd.argoproj.io/sync-wave: "0"
+    finalizers:
+        - resources-finalizer.argocd.argoproj.io
+spec:
+    project: default
+    # Single-source Application: just the upstream CloudNativePG Helm chart at
+    # a pinned version (operator + CRDs). No `Cluster` resources are created in
+    # Phase 0 — those land in Phase 3, at which point this may grow a second
+    # source pointing at `infra/cnpg/` (mirroring the ESO layout).
+    #
+    # Bumping the chart: edit `targetRevision` below, verify the rendered
+    # output, open a PR. Latest releases:
+    # https://github.com/cloudnative-pg/charts/releases
+    source:
+        repoURL: https://cloudnative-pg.github.io/charts
+        chart: cloudnative-pg
+        targetRevision: 0.28.0
+        helm:
+            releaseName: cnpg
+            # The chart installs CRDs by default; leave that on so Argo CD
+            # owns them. `crds.create: true` is the chart default but we set
+            # it explicitly for clarity, mirroring ESO's `installCRDs: true`.
+            parameters:
+                - name: crds.create
+                  value: "true"
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: cnpg-system
+    # Mirror argocd-self / external-secrets: auto-heal drift, never auto-prune.
+    # Losing a CNPG CRD via prune would orphan every Postgres `Cluster` in the
+    # cluster. Manual prune is `argocd app sync cnpg --prune`.
+    #
+    # No `ignoreDifferences` here. Unlike ESO, CNPG doesn't have a known
+    # webhook-mutates-defaults pattern at the operator-install level. If
+    # post-install reconciles surface drift, address it as a follow-up — don't
+    # add speculative ignore rules.
+    syncPolicy:
+        automated:
+            prune: false
+            selfHeal: true
+        syncOptions:
+            - ServerSideApply=true
+            - CreateNamespace=true
