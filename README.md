@@ -1,15 +1,19 @@
 # homelab
 
-GitOps repository for a single-node k3s homelab cluster.
+GitOps repository for a single-node K3s homelab cluster, managed by [Argo CD](https://argo-cd.readthedocs.io/). Argo CD watches `main` and reconciles every change.
 
-**Node:** AMD Ryzen 9600X, 64 GB RAM  
-**Storage:** k3s built-in `local-path` provisioner  
-**Exposed port:** 25565 (router port forward)
+**Hardware:** AMD Ryzen 9600X · 64 GB RAM · K3s with `local-path` provisioner. Detail in [docs/node-setup.md](docs/node-setup.md).
 
-| Doc | Purpose |
-|-----|---------|
-| [docs/node-setup.md](docs/node-setup.md) | Hardware, OS, network, SSH, firewall, k3s reference |
-| [docs/commands.md](docs/commands.md) | Common commands for node, k3s, Minecraft, RCON, Chunky |
+---
+
+## What runs here
+
+| Track | What | Status | Details |
+|---|---|---|---|
+| `apps/cove/` | Cove iOS app's backend services | Phase 0 in progress (cluster bootstrap) | [apps/cove/README.md](apps/cove/README.md) |
+| `apps/gaming/minecraft/` | Minecraft Fabric server (Homestead modpack, port 25565) | Running | [apps/gaming/minecraft/README.md](apps/gaming/minecraft/README.md) |
+
+Plus the platform layer in `infra/` that everything else builds on (see "Operators" below).
 
 ---
 
@@ -18,103 +22,69 @@ GitOps repository for a single-node k3s homelab cluster.
 ```
 homelab/
 ├── apps/
-│   └── gaming/
-│       └── minecraft/      ← Homestead modpack (Fabric 1.20.1)
-├── docs/
-│   ├── node-setup.md
-│   └── commands.md
-└── infra/                  ← cert-manager, ingress-nginx, etc. (future)
+│   ├── cove/                    # Cove backend (Phase 1+ services land here)
+│   │   ├── base/
+│   │   └── overlays/{staging,prod}/
+│   └── gaming/minecraft/        # Homestead Fabric modpack
+├── infra/
+│   ├── argocd/                  # Argo CD itself (self-managed via app-of-apps)
+│   ├── external-secrets/        # ESO config (ClusterSecretStore + smoke test)
+│   ├── cnpg/                    # CloudNativePG operator (Phase 3 provisions clusters)
+│   └── garage/                  # Garage S3-compatible object storage
+├── argocd/                      # Argo CD Application manifests (the app-of-apps roots)
+├── docs/                        # Operator runbooks
+└── .github/workflows/           # PR validation + manual deploys
 ```
 
 ---
 
-## Deploying Minecraft
+## How deploys work
 
-The deploy workflow is triggered manually from the Actions tab:
+GitOps via Argo CD. The default path is **PR → CI → merge → Argo CD reconciles**:
 
-> **Actions → Deploy Minecraft → Run workflow**
+1. Open a PR with manifest changes
+2. CI validates: `kubectl kustomize` renders cleanly, `kubeconform` schema-checks the rendered output
+3. Merge to `main`
+4. Argo CD picks it up within ~3 minutes (or click **Hard Refresh** in the UI to apply immediately)
 
-Or locally with `kubectl` pointed at the cluster:
+Argo CD's root `Application` watches `argocd/` and creates child Applications for every operator and app track. Argo CD itself is self-managing — bumping its version is a PR like any other.
 
-```bash
-kubectl apply -f apps/gaming/minecraft/namespace.yaml && \
-kubectl apply -f apps/gaming/minecraft/
-```
-
-> [!NOTE]
-> The two-step apply is necessary because the `gaming` namespace must exist
-> before the deployment, PVC, and service can be created.
-
-### Add the KUBECONFIG secret (one-time)
-
-The workflow authenticates to k3s via a kubeconfig stored as a GitHub Actions secret.
-
-> [!NOTE]
-> The deploy workflow uses a GitHub-hosted runner, so the kubeconfig must point
-> to a publicly reachable API server endpoint — not `127.0.0.1`. Set up a tunnel
-> (Tailscale, Cloudflare Tunnel) or forward port 6443 on your router before
-> wiring this up.
-
-```bash
-# On the node, grab the kubeconfig k3s generates:
-sudo cat /etc/rancher/k3s/k3s.yaml
-```
-
-Update the `server:` field to your public endpoint, then add it in GitHub:
-
-> **Repo → Settings → Secrets and variables → Actions → New repository secret**  
-> Name: `KUBECONFIG`  
-> Value: _(paste the edited k3s.yaml contents)_
-
-### Add the CurseForge API key secret (one-time)
-
-Required for downloading extra mods via `CURSEFORGE_FILES`:
-
-```bash
-kubectl create secret generic minecraft-secrets \
-  --from-literal=CF_API_KEY='$2a$10$your-key-here' \
-  -n gaming
-```
-
-> [!IMPORTANT]
-> Use single quotes around the key value — CurseForge keys start with `$2a$10$`
-> and double quotes will cause the shell to expand the `$` signs, storing an empty value.
-
-### First-time world pre-generation
-
-Once the server is running, open an RCON session and run Chunky for each dimension:
-
-```bash
-kubectl exec -it -n gaming $(kubectl get pod -n gaming -l app=minecraft -o jsonpath='{.items[0].metadata.name}') -- rcon-cli
-```
-
-```
-chunky radius 3000
-chunky start
-```
-
-Wait for completion (`chunky status`), then repeat for other dimensions:
-
-```
-chunky world minecraft:the_nether
-chunky radius 3000
-chunky start
-
-chunky world minecraft:the_end
-chunky radius 3000
-chunky start
-```
-
-### Client setup — Distant Horizons
-
-Each player must install the matching client mod:
-
-- **Distant Horizons 3.0.2-b** for Fabric 1.20.1 — <https://modrinth.com/mod/distanthorizons>
+The Minecraft deploy still uses a legacy GitHub Actions workflow that predates the Argo CD setup. See [apps/gaming/minecraft/README.md](apps/gaming/minecraft/README.md).
 
 ---
 
-## Secrets policy
+## Operators installed
 
-- **Never commit** `*.env` files or `secrets.yaml` — both are in `.gitignore`.
-- Cluster credentials belong in **GitHub Secrets** or `kubectl` secrets only.
-- Future API keys (CurseForge, CDN, etc.) follow the same rule.
+Each operator has a runbook covering install, day-2 operations, and any manual bootstrap steps:
+
+| Operator | Purpose | Runbook |
+|---|---|---|
+| Argo CD | GitOps reconciler | [docs/argocd-install.md](docs/argocd-install.md) |
+| External Secrets Operator | Sync GCP Secret Manager → K8s Secrets | [docs/external-secrets-install.md](docs/external-secrets-install.md) |
+| CloudNativePG (CNPG) | Postgres `Cluster` CRDs (clusters provisioned in Phase 3) | [docs/cnpg-install.md](docs/cnpg-install.md) |
+| Garage | S3-compatible object storage (`images`, `postgres-backups`) | [docs/garage-install.md](docs/garage-install.md) |
+
+Pending Phase 0: kube-prometheus-stack, Loki + Promtail, Cloudflare Tunnel.
+
+---
+
+## Secrets
+
+All real secret values live in **GCP Secret Manager** (project `cove-6a685`). Nothing in `main` is ever a real secret value.
+
+Flow:
+
+1. The value gets created in GCP Secret Manager (`gcloud secrets create ...`)
+2. An `ExternalSecret` manifest in this repo declares "materialize this in namespace X as K8s Secret Y"
+3. ESO reconciles it on its refresh interval (default 1h; force-sync via annotation)
+
+The one bootstrap exception: ESO needs GCP credentials to fetch other secrets, so its own GCP service account JSON key is planted manually as a K8s Secret. Detailed in [docs/external-secrets-install.md](docs/external-secrets-install.md).
+
+`*.env` files, `secrets.yaml`, and downloaded SA keys are gitignored as belt-and-suspenders.
+
+---
+
+## More
+
+- Hardware / network / SSH: [docs/node-setup.md](docs/node-setup.md)
+- Common kubectl / k3s commands: [docs/commands.md](docs/commands.md)
