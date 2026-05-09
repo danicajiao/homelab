@@ -1,0 +1,61 @@
+name: Validate manifests
+
+# Schema-level safety net for every PR (and pushes to main). Catches typos,
+# wrong types, missing required fields, deprecated APIs — anything kustomize
+# or kubeconform can detect statically. Does NOT catch logic errors (e.g. a
+# correct-looking ignoreDifferences rule that points at the wrong path) or
+# behavioral issues (anything that needs a live cluster). Use this as a
+# floor, not a ceiling.
+
+on:
+    pull_request:
+    push:
+        branches: [main]
+
+permissions:
+    contents: read
+
+jobs:
+    validate:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install kubeconform
+              run: |
+                  curl -fsSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+                  sudo install kubeconform /usr/local/bin/
+                  kubeconform -v
+
+            - name: Render and validate every kustomization
+              env:
+                  # CRD schemas come from the datreeio CRDs-catalog so kubeconform
+                  # recognizes Application, ExternalSecret, ClusterSecretStore, etc.
+                  # When a new operator is added (e.g. monitoring.coreos.com for
+                  # Prometheus, cnpg.io for CloudNativePG Cluster resources), check
+                  # https://github.com/datreeio/CRDs-catalog for coverage. Resources
+                  # whose schemas are missing are reported as "skipped" — that's a
+                  # signal to either find the schema or accept the gap explicitly.
+                  CRD_SCHEMA: "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+              run: |
+                  set -euo pipefail
+                  failed=0
+                  for dir in $(find . -name kustomization.yaml -not -path './.git/*' -exec dirname {} \; | sort); do
+                      echo "::group::$dir"
+                      # Skip CustomResourceDefinition: when an Application sources
+                      # an upstream chart's CRDs (e.g. Argo CD's install.yaml,
+                      # Prometheus Operator's CRDs), kubeconform doesn't have
+                      # schemas for the CRD definitions themselves. Those are
+                      # tested by upstream — validating them locally adds no
+                      # value. We still validate every CR (Application,
+                      # ExternalSecret, ClusterSecretStore, etc.) via $CRD_SCHEMA.
+                      if ! kubectl kustomize "$dir" \
+                          | kubeconform -strict -summary \
+                              -skip CustomResourceDefinition \
+                              -schema-location default \
+                              -schema-location "$CRD_SCHEMA"; then
+                          failed=1
+                      fi
+                      echo "::endgroup::"
+                  done
+                  exit $failed
