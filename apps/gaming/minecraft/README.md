@@ -24,6 +24,9 @@ kubectl scale deployment minecraft -n gaming --replicas=1
 kubectl get pods -n gaming -l app=minecraft
 ```
 
+> [!IMPORTANT]
+> A `ValidatingAdmissionPolicy` ([`replica-cap.yaml`](replica-cap.yaml)) enforces a **hard cap of 1 replica**. Attempting `--replicas=2` (or higher) is rejected at the API server — Minecraft world data is single-writer and concurrent pods on the same PVC would corrupt the world. To run more than one server, create a separate Deployment + PVC.
+
 ## Secret management
 
 ### CurseForge API key

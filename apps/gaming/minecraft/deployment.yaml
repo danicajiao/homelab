@@ -11,6 +11,8 @@ spec:
   #   kubectl scale deployment minecraft -n gaming --replicas=1   # start
   #   kubectl scale deployment minecraft -n gaming --replicas=0   # stop
   # Hard cap: never scale above 1 — concurrent writers corrupt the world.
+  # Enforced at the API server by `replica-cap.yaml` (ValidatingAdmissionPolicy);
+  # a `kubectl scale --replicas=2` will be rejected, not just discouraged.
   replicas: 0
   selector:
     matchLabels:

@@ -1,0 +1,50 @@
+# Hard cap on the Minecraft Deployment's replica count.
+#
+# Minecraft world data is single-writer. Two pods writing to the same PVC
+# concurrently will corrupt the world (`session.lock` race, NBT tag clobbering).
+# A `# never scale above 1` comment on the Deployment is just a warning —
+# nothing actually prevents `kubectl scale --replicas=5`. This policy enforces
+# the cap at the API server.
+#
+# Uses ValidatingAdmissionPolicy (CEL-based, native K8s, GA in 1.30+). The
+# CEL match-name approach below scopes the policy to the Deployment named
+# `minecraft` rather than relying on a label, so it stays self-contained
+# (the Deployment manifest doesn't need a top-level metadata label added).
+#
+# Subresources note: scoping `resources` to both `deployments` and
+# `deployments/scale` is important — `kubectl scale` operates on the /scale
+# subresource, and without including it the policy would only catch full
+# Deployment updates (kubectl apply, kubectl edit). The Scale subresource
+# preserves `metadata.name` from the parent, so the same CEL expression works
+# for both code paths.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+    name: minecraft-replicas-cap
+spec:
+    failurePolicy: Fail
+    matchConstraints:
+        resourceRules:
+            - apiGroups: ["apps"]
+              apiVersions: ["v1"]
+              operations: ["CREATE", "UPDATE"]
+              resources: ["deployments", "deployments/scale"]
+    validations:
+        - expression: "object.metadata.name != 'minecraft' || object.spec.replicas <= 1"
+          message: "Minecraft Deployment replicas must be 0 or 1 — concurrent writers corrupt the world. To run more than one Minecraft instance, use a separate Deployment with a separate PVC."
+          reason: Invalid
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+    name: minecraft-replicas-cap-binding
+spec:
+    policyName: minecraft-replicas-cap
+    # Restrict the policy to the `gaming` namespace. The CEL expression
+    # additionally guards on `metadata.name == 'minecraft'` so other
+    # Deployments in `gaming` (if any are ever added) aren't affected.
+    matchResources:
+        namespaceSelector:
+            matchLabels:
+                kubernetes.io/metadata.name: gaming
+    validationActions: [Deny]
