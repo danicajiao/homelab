@@ -1,0 +1,90 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: garage
+    namespace: argocd
+    annotations:
+        # Phase 0 install — runs alongside the other foundational Applications
+        # in wave 0. Buckets, keys, and the cluster layout are bootstrapped
+        # manually after the StatefulSet comes up; see `docs/garage-install.md`.
+        argocd.argoproj.io/sync-wave: "0"
+    finalizers:
+        - resources-finalizer.argocd.argoproj.io
+spec:
+    project: default
+    # Two-source Application:
+    #   1. The official Garage Helm chart, rendered straight out of the
+    #      Deuxfleurs git repo at `script/helm/garage`. Garage doesn't publish
+    #      a chart to a Helm repo — the chart is versioned alongside the
+    #      Garage source itself, so we pin a Garage release tag and let Argo
+    #      CD render the chart at that path.
+    #   2. This repo's `infra/garage/` (namespace + smoke-test ExternalSecret).
+    #
+    # Bumping Garage: edit `targetRevision` below to a newer tag, verify the
+    # rendered output, open a PR. Latest releases:
+    # https://git.deuxfleurs.fr/Deuxfleurs/garage/tags
+    #
+    # v2.3.0 is the latest stable as of this PR (chart 0.9.3, appVersion
+    # v2.3.0 — see `script/helm/garage/Chart.yaml` at that tag).
+    sources:
+        - repoURL: https://git.deuxfleurs.fr/Deuxfleurs/garage.git
+          targetRevision: v2.3.0
+          path: script/helm/garage
+          helm:
+              releaseName: garage
+              # Chart values live here rather than in the repo to keep the
+              # `infra/garage/` kustomize tree free of chart-rendered output
+              # (Argo CD handles Helm rendering natively). Verified against
+              # `script/helm/garage/values.yaml` at tag v2.3.0.
+              values: |
+                  garage:
+                      # Single-node homelab → replication factor 1, one zone.
+                      # Bump to 3 only when there are 3+ nodes (cluster layout
+                      # has to be reapplied at that point — see runbook).
+                      replicationFactor: "1"
+                      # Read-after-write is fine at RF=1; no quorum to relax.
+                      consistencyMode: "consistent"
+                  deployment:
+                      # Single StatefulSet replica matches replicationFactor.
+                      replicaCount: 1
+                  persistence:
+                      enabled: true
+                      meta:
+                          # Metadata DB — small but hot. K3s default storage
+                          # class is `local-path` (Rancher local-path-provisioner)
+                          # which is what we want here. Leaving `storageClass`
+                          # unset lets the cluster default apply.
+                          size: 2Gi
+                      data:
+                          # Object data — sized to cover product images +
+                          # postgres backups for Phase 0. Bump when consumers
+                          # land (resize the PVC; local-path supports it on
+                          # recent K3s).
+                          size: 20Gi
+                  service:
+                      # In-cluster only. Future imgproxy / cove-image / CNPG
+                      # backups all dial `garage.garage.svc.cluster.local:3900`.
+                      # No ingress in Phase 0; admin API stays off the network.
+                      type: ClusterIP
+        - repoURL: https://github.com/danicajiao/homelab.git
+          targetRevision: main
+          path: infra/garage
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: garage
+    # Mirror argocd-self / external-secrets / cnpg: auto-heal drift, never
+    # auto-prune. Pruning the StatefulSet or its PVCs would lose every object
+    # in Garage. Manual prune is `argocd app sync garage --prune`.
+    #
+    # No `ignoreDifferences` here. The Garage chart doesn't have a known
+    # webhook-mutates-defaults pattern, and the chart-generated `rpc-secret`
+    # Secret is owned by the chart on first install. If post-install
+    # reconciles surface drift, address it as a follow-up — don't add
+    # speculative ignore rules.
+    syncPolicy:
+        automated:
+            prune: false
+            selfHeal: true
+        syncOptions:
+            - ServerSideApply=true
+            - CreateNamespace=true

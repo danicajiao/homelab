@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Garage S3-compatible object store — repo-managed manifests.
+#
+# Phase 0 owns the namespace plus the smoke-test ExternalSecret here. The
+# Garage StatefulSet/Service/PVCs/etc. are installed via the upstream Helm
+# chart that lives inside the Garage source repo at `script/helm/garage`,
+# which Argo CD pulls directly — see `argocd/garage.yaml` for the chart source
+# and pinned git tag.
+#
+# Buckets (`images`, `postgres-backups`) and access keys are NOT GitOps —
+# Garage manages those via its own CLI inside the running pod. The full
+# bootstrap sequence (layout, buckets, keys, GCP Secret Manager) is in
+# `docs/garage-install.md`.
+#
+# Latest releases: https://git.deuxfleurs.fr/Deuxfleurs/garage/tags
+
+namespace: garage
+
+resources:
+    - namespace.yaml
+    - external-secret-images.yaml

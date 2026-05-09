@@ -8,5 +8,6 @@ resources:
     - argocd-self.yaml
     - external-secrets.yaml
     - cnpg.yaml
+    - garage.yaml
     - apps-cove-staging.yaml
     - apps-cove-prod.yaml
