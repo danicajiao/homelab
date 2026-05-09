@@ -11,7 +11,7 @@ Argo CD reconciles `apps/gaming/minecraft/` from `main` automatically — the ma
 
 ## Starting and stopping the server
 
-Day-to-day on/off is `kubectl scale`. Argo CD won't revert these because `/spec/replicas` is in the Application's `ignoreDifferences` block ([`argocd/minecraft.yaml`](../../../argocd/minecraft.yaml)). Git holds the default (`replicas: 1`) so a fresh cluster bootstrap auto-starts the server; humans hold the runtime control.
+Day-to-day on/off is `kubectl scale`. Argo CD won't revert these because `/spec/replicas` is in the Application's `ignoreDifferences` block ([`argocd/minecraft.yaml`](../../../argocd/minecraft.yaml)). Git holds the default (`replicas: 0`) so a fresh cluster bootstrap leaves the server **off** — it only runs when you manually scale it up. Once running, manual scale changes persist through Argo CD reconciles and machine restarts (K3s preserves the live state in etcd).
 
 ```bash
 # Stop the server (graceful — world saves before pod exits)
