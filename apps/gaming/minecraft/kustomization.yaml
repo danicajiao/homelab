@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Minecraft Fabric server (Homestead modpack) — repo-managed manifests.
+#
+# Bundles the Deployment / PVC / Service / Namespace that have always lived in
+# this directory plus the new `external-secret.yaml` (CurseForge API key
+# pulled from GCP Secret Manager via ESO). Argo CD reconciles this kustomization
+# from `argocd/minecraft.yaml` — see that file for sync policy and the
+# `/spec/replicas` ignore rule that keeps `kubectl scale` from being reverted.
+
+namespace: gaming
+
+resources:
+    - namespace.yaml
+    - deployment.yaml
+    - pvc.yaml
+    - service.yaml
+    - external-secret.yaml

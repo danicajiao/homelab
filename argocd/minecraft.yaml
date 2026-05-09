@@ -1,0 +1,77 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: minecraft
+    namespace: argocd
+    annotations:
+        # Wave 0 — a plain-manifest app track with no dependency on the
+        # operator install order beyond ESO already being up (the
+        # ExternalSecret here resolves against the cluster-scoped
+        # `gcp-secret-manager` ClusterSecretStore, which the
+        # `external-secrets` Application reconciles in the same wave).
+        argocd.argoproj.io/sync-wave: "0"
+    finalizers:
+        - resources-finalizer.argocd.argoproj.io
+spec:
+    project: default
+    # Single-source Application: just `apps/gaming/minecraft/` rendered via
+    # kustomize. No upstream chart involved — Minecraft is plain manifests
+    # (Deployment + PVC + Service + Namespace + ExternalSecret), so the
+    # two-source pattern used by `garage.yaml` and `external-secrets.yaml`
+    # (chart + repo overlay) doesn't apply here.
+    source:
+        repoURL: https://github.com/danicajiao/homelab.git
+        targetRevision: main
+        path: apps/gaming/minecraft
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: gaming
+    # Two ignoreDifferences rules:
+    #
+    # 1. Deployment/minecraft `/spec/replicas` — git holds the default
+    #    (`replicas: 1`, so a fresh cluster bootstrap auto-starts the server),
+    #    but day-to-day on/off is `kubectl scale deployment minecraft -n gaming
+    #    --replicas={0,1}`. Without this ignore rule, selfHeal would revert
+    #    every manual scale within a reconcile cycle. The alternative —
+    #    bumping replicas via PR for every start/stop — adds friction to a
+    #    per-day operation. Same pattern HPA-managed apps use. Design
+    #    rationale in danicajiao/homelab#12.
+    #
+    # 2. ExternalSecret webhook-defaulted fields — ESO's admission webhook
+    #    auto-fills `spec.data[].remoteRef.{conversion,decoding,metadata,
+    #    nullByte}*` and `spec.target.deletionPolicy` on apply, which Argo
+    #    CD reads back as drift. This rule is duplicated from
+    #    `argocd/external-secrets.yaml` and `argocd/garage.yaml`; with three
+    #    Applications now carrying the same block, the cleanup is to lift
+    #    it to the `default` AppProject. Tracked as the "related cleanup"
+    #    in danicajiao/homelab#12.
+    ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          name: minecraft
+          namespace: gaming
+          jsonPointers:
+              - /spec/replicas
+        - group: external-secrets.io
+          kind: ExternalSecret
+          jqPathExpressions:
+              - .spec.data[].remoteRef.conversionStrategy
+              - .spec.data[].remoteRef.decodingStrategy
+              - .spec.data[].remoteRef.metadataPolicy
+              - .spec.data[].remoteRef.nullBytePolicy
+              - .spec.target.deletionPolicy
+    # Mirror argocd-self / external-secrets / cnpg / garage on prune/heal:
+    # auto-heal drift, never auto-prune. Pruning the Deployment or PVC would
+    # take the world data with it. Manual prune is
+    # `argocd app sync minecraft --prune`.
+    syncPolicy:
+        automated:
+            prune: false
+            selfHeal: true
+        syncOptions:
+            - ServerSideApply=true
+            - CreateNamespace=true
+            # Make selfHeal honor the ignoreDifferences rules above instead
+            # of fighting the manual scale and the ESO webhook on every
+            # reconcile. Same lesson as `external-secrets.yaml` / `garage.yaml`.
+            - RespectIgnoreDifferences=true
