@@ -6,5 +6,6 @@ kind: Kustomization
 
 resources:
     - argocd-self.yaml
+    - external-secrets.yaml
     - apps-cove-staging.yaml
     - apps-cove-prod.yaml

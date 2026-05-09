@@ -1,0 +1,27 @@
+# Smoke test ExternalSecret.
+#
+# Pulls a throwaway secret named `eso-smoke-test` from GCP Secret Manager (in
+# project `cove-6a685`) and materializes it as a K8s Secret of the same name in
+# the `external-secrets` namespace. Used once during the install runbook to
+# prove the ClusterSecretStore + auth path work end-to-end.
+#
+# Remove this file (and the corresponding `gcloud secrets delete eso-smoke-test`)
+# once Phase 0 is verified and a real service is consuming ESO. Until then,
+# keeping it in-tree gives Argo CD something concrete to reconcile.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+    name: eso-smoke-test
+    namespace: external-secrets
+spec:
+    refreshInterval: 1h
+    secretStoreRef:
+        kind: ClusterSecretStore
+        name: gcp-secret-manager
+    target:
+        name: eso-smoke-test
+        creationPolicy: Owner
+    data:
+        - secretKey: value
+          remoteRef:
+              key: eso-smoke-test
