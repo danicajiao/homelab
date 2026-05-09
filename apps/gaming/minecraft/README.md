@@ -47,12 +47,12 @@ Required for downloading extra mods via `CURSEFORGE_FILES`:
 
 ```bash
 kubectl create secret generic minecraft-secrets \
-  --from-literal=CF_API_KEY='$2a$10$your-key-here' \
+  --from-literal=CF_API_KEY='<paste-curseforge-api-key>' \
   -n gaming
 ```
 
 > [!IMPORTANT]
-> Use single quotes around the key value — CurseForge keys start with `$2a$10$` and double quotes will cause the shell to expand the `$` signs, storing an empty value.
+> CurseForge keys start with `$2a$10$` (a literal bcrypt prefix). **Wrap the value in single quotes** as shown — double quotes let the shell expand the `$` signs and you'd end up storing an empty value.
 
 ## First-time world pre-generation
 
@@ -81,9 +81,9 @@ chunky radius 3000
 chunky start
 ```
 
-## Client requirement
+## Optional client mod
 
-Each player must install the matching client mod:
+The server's Chunky pre-gen makes long-distance terrain available, but rendering it client-side requires Distant Horizons. The vanilla render distance still works without it.
 
 - **Distant Horizons 3.0.2-b** for Fabric 1.20.1 — <https://modrinth.com/mod/distanthorizons>
 
