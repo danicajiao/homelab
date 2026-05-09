@@ -1,4 +1,4 @@
-name: Validate manifests
+name: Validate Manifests
 
 # Schema-level safety net for every PR (and pushes to main). Catches typos,
 # wrong types, missing required fields, deprecated APIs — anything kustomize
