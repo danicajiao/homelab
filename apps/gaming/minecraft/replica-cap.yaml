@@ -30,7 +30,14 @@ spec:
               operations: ["CREATE", "UPDATE"]
               resources: ["deployments", "deployments/scale"]
     validations:
-        - expression: "object.metadata.name != 'minecraft' || object.spec.replicas <= 1"
+        # The middle clause `!has(object.spec.replicas)` is required because
+        # the admission `object` for the deployments/scale subresource (and
+        # certain other patch shapes) doesn't always include `spec.replicas`
+        # — accessing a missing key in CEL is a hard error, not a falsey
+        # comparison. Treating "field absent" as "no replica change being
+        # attempted" lets non-replica updates pass through cleanly.
+        # Requests that DO carry a replica change still get checked.
+        - expression: "object.metadata.name != 'minecraft' || !has(object.spec.replicas) || object.spec.replicas <= 1"
           message: "Minecraft Deployment replicas must be 0 or 1 — concurrent writers corrupt the world. To run more than one Minecraft instance, use a separate Deployment with a separate PVC."
           reason: Invalid
 ---
