@@ -4,7 +4,16 @@ metadata:
   name: minecraft
   namespace: gaming
 spec:
-  replicas: 1  # never scale above 1 — world corruption risk
+  # Default off — only manual `kubectl scale` brings the server up. Argo CD
+  # ignores `/spec/replicas` (see `argocd/minecraft.yaml` ignoreDifferences),
+  # so live state persists across reconciles. The 0 here only takes effect on
+  # fresh cluster bootstrap (Argo CD's first apply). Manual scale flow:
+  #   kubectl scale deployment minecraft -n gaming --replicas=1   # start
+  #   kubectl scale deployment minecraft -n gaming --replicas=0   # stop
+  # Hard cap: never scale above 1 — concurrent writers corrupt the world.
+  # Enforced at the API server by `replica-cap.yaml` (ValidatingAdmissionPolicy);
+  # a `kubectl scale --replicas=2` will be rejected, not just discouraged.
+  replicas: 0
   selector:
     matchLabels:
       app: minecraft

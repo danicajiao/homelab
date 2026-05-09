@@ -62,19 +62,20 @@ POD=$(kubectl get pod -n gaming -l app=minecraft -o jsonpath='{.items[0].metadat
 
 ### Deploy
 
+The normal flow is **git → Argo CD**: edit a manifest under `apps/gaming/minecraft/`, open a PR, merge, Argo CD reconciles within ~3 minutes. The `kubectl apply` commands below are for breaking-glass scenarios only (Argo CD down, recovering from a bad sync, etc.) and should be unusual.
+
 ```bash
-# First-time deploy (two-step to avoid namespace race condition)
+# Breaking-glass only — first-time apply (two-step to avoid namespace race)
 kubectl apply -f apps/gaming/minecraft/namespace.yaml && \
-kubectl apply -f apps/gaming/minecraft/
+kubectl apply -k apps/gaming/minecraft/
 
-# Re-apply after manifest changes
-kubectl apply -f apps/gaming/minecraft/
-
-# Re-apply a single file
-kubectl apply -f apps/gaming/minecraft/deployment.yaml
+# Breaking-glass only — re-apply after manifest changes
+kubectl apply -k apps/gaming/minecraft/
 ```
 
-### Scale
+### Scale (start / stop the server)
+
+`/spec/replicas` is intentionally outside Argo CD's reconcile loop (see `ignoreDifferences` on `argocd/minecraft.yaml`), so these commands are safe day-to-day — selfHeal will not revert them. Git holds the default (`replicas: 1`) so a fresh cluster bootstrap auto-starts the server; humans hold the runtime control.
 
 ```bash
 # Stop the server (graceful — world saves before pod exits)
@@ -82,6 +83,17 @@ kubectl scale deployment minecraft -n gaming --replicas=0
 
 # Start the server
 kubectl scale deployment minecraft -n gaming --replicas=1
+
+# Status
+kubectl get pods -n gaming -l app=minecraft
+```
+
+Optional shell aliases:
+
+```bash
+alias mc-stop='kubectl scale deployment minecraft -n gaming --replicas=0'
+alias mc-start='kubectl scale deployment minecraft -n gaming --replicas=1'
+alias mc-status='kubectl get pods -n gaming -l app=minecraft'
 ```
 
 ### Restart
@@ -93,13 +105,15 @@ kubectl rollout restart deployment minecraft -n gaming
 
 ### Tear down
 
+> Breaking-glass only — Argo CD will recreate anything it owns within a reconcile cycle. To actually remove the app, also delete `argocd/minecraft.yaml` (and the entry in `argocd/kustomization.yaml`) via PR.
+
 ```bash
 # Delete deployment and service only (preserves PVC and world data)
 kubectl delete -f apps/gaming/minecraft/deployment.yaml
 kubectl delete -f apps/gaming/minecraft/service.yaml
 
 # Delete everything including PVC (world data will be lost)
-kubectl delete -f apps/gaming/minecraft/
+kubectl delete -k apps/gaming/minecraft/
 ```
 
 ---
@@ -139,17 +153,28 @@ kubectl exec -it -n gaming $POD -- cat /data/server.properties
 
 ## kubectl — Secrets
 
+The `minecraft-secrets` Secret (key: `CF_API_KEY`) is materialized by ESO from GCP Secret Manager — see [`apps/gaming/minecraft/external-secret.yaml`](../apps/gaming/minecraft/external-secret.yaml). `kubectl create secret` is no longer part of the flow.
+
 ```bash
-# Create the CurseForge API key secret
-# Use single quotes — the key contains $ signs that the shell would expand
-kubectl create secret generic minecraft-secrets \
-  --from-literal=CF_API_KEY='your-key-here' \
-  -n gaming
+# Upload (or rotate) the CurseForge API key in GCP Secret Manager.
+# Use single quotes — the key contains $ signs that the shell would expand.
+echo -n '<paste-curseforge-api-key>' | gcloud secrets create minecraft-curseforge-api-key \
+    --project cove-6a685 --data-file=- --replication-policy=automatic
+# To rotate after the secret already exists, swap `create` for:
+#   gcloud secrets versions add minecraft-curseforge-api-key --data-file=-
+# ESO picks up the new version on its next refresh (default 1h).
 
 # List secrets
 kubectl get secret -n gaming
 
-# Delete a secret
+# Inspect the ExternalSecret status
+kubectl get externalsecret -n gaming minecraft-curseforge-key
+
+# Delete the materialized K8s Secret.
+# ESO will immediately recreate it from GCP SM (creationPolicy: Owner). To
+# actually remove it, delete the GCP secret AND the ExternalSecret manifest:
+#   gcloud secrets delete minecraft-curseforge-api-key --project cove-6a685
+#   # then remove apps/gaming/minecraft/external-secret.yaml via PR
 kubectl delete secret minecraft-secrets -n gaming
 ```
 
