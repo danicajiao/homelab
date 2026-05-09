@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# External Secrets Operator — repo-managed manifests.
+#
+# This kustomization holds only the namespace plus ESO custom resources
+# (ClusterSecretStore, smoke-test ExternalSecret). The operator itself is
+# installed via the upstream Helm chart, which Argo CD pulls directly — see
+# `argocd/external-secrets.yaml` for the chart source and pinned version.
+#
+# Splitting it this way keeps chart values out of the kustomize tree (Argo CD
+# handles Helm rendering natively) while still letting us version-control the
+# ClusterSecretStore and any future ESO CRs alongside the rest of the platform.
+#
+# Latest releases: https://github.com/external-secrets/external-secrets/releases
+
+namespace: external-secrets
+
+resources:
+    - namespace.yaml
+    - cluster-secret-store.yaml
+    - smoke-test.yaml
