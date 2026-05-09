@@ -2,57 +2,58 @@
 
 Fabric 1.20.1 server running the [Homestead](https://www.curseforge.com/minecraft/modpacks/homestead) modpack. Exposed on port 25565 via a router-level forward.
 
-> [!NOTE]
-> This deploy uses a legacy GitHub Actions workflow ([`.github/workflows/deploy.yml`](../../../.github/workflows/deploy.yml)) that predates the Argo CD setup. Migrating it to a `cove`-style Argo CD Application is a small future task — not currently tracked.
-
 ## Deploying
 
-The deploy workflow is triggered manually:
-
-> **Repo → Actions → Deploy Minecraft → Run workflow**
-
-Or locally with `kubectl` pointed at the cluster:
-
-```bash
-kubectl apply -f apps/gaming/minecraft/namespace.yaml && \
-kubectl apply -f apps/gaming/minecraft/
-```
+Argo CD reconciles `apps/gaming/minecraft/` from `main` automatically — the manifests in this directory are applied within ~3 minutes of merge (or immediately if you force a refresh on the root Application). Manual `kubectl apply` still works for breaking-glass scenarios but should be unusual.
 
 > [!NOTE]
-> The two-step apply is necessary because the `gaming` namespace must exist before the deployment, PVC, and service can be created.
+> The Application lives at [`argocd/minecraft.yaml`](../../../argocd/minecraft.yaml). It's single-source (kustomize, no upstream chart) and ignores `/spec/replicas` on the Deployment so day-to-day starts/stops via `kubectl scale` aren't reverted by selfHeal — see [Starting and stopping the server](#starting-and-stopping-the-server) below.
 
-## One-time setup
+## Starting and stopping the server
 
-### KUBECONFIG GitHub secret
-
-The workflow authenticates to K3s via a kubeconfig stored as a GitHub Actions secret.
-
-> [!NOTE]
-> The deploy workflow uses a GitHub-hosted runner, so the kubeconfig must point to a publicly reachable API server endpoint — not `127.0.0.1`. Set up a tunnel (Tailscale, Cloudflare Tunnel) or forward port 6443 on your router before wiring this up.
+Day-to-day on/off is `kubectl scale`. Argo CD won't revert these because `/spec/replicas` is in the Application's `ignoreDifferences` block ([`argocd/minecraft.yaml`](../../../argocd/minecraft.yaml)). Git holds the default (`replicas: 1`) so a fresh cluster bootstrap auto-starts the server; humans hold the runtime control.
 
 ```bash
-# On the node, grab the kubeconfig K3s generates:
-sudo cat /etc/rancher/k3s/k3s.yaml
+# Stop the server (graceful — world saves before pod exits)
+kubectl scale deployment minecraft -n gaming --replicas=0
+
+# Start the server
+kubectl scale deployment minecraft -n gaming --replicas=1
+
+# Status
+kubectl get pods -n gaming -l app=minecraft
 ```
 
-Update the `server:` field to your public endpoint, then add it in GitHub:
-
-> **Repo → Settings → Secrets and variables → Actions → New repository secret**
-> Name: `KUBECONFIG`
-> Value: _(paste the edited k3s.yaml contents)_
+## Secret management
 
 ### CurseForge API key
 
-Required for downloading extra mods via `CURSEFORGE_FILES`:
+Required for downloading extra mods via `CURSEFORGE_FILES`. The value lives in **GCP Secret Manager** (project `cove-6a685`); ESO materializes it as the K8s Secret `minecraft-secrets` with key `CF_API_KEY` via [`external-secret.yaml`](external-secret.yaml). The Deployment consumes it via `secretKeyRef` — no `kubectl create secret` needed.
+
+To upload (or rotate) the key:
 
 ```bash
-kubectl create secret generic minecraft-secrets \
-  --from-literal=CF_API_KEY='<paste-curseforge-api-key>' \
-  -n gaming
+echo -n '<paste-curseforge-api-key>' | gcloud secrets create minecraft-curseforge-api-key \
+    --project cove-6a685 --data-file=- --replication-policy=automatic
 ```
 
 > [!IMPORTANT]
 > CurseForge keys start with `$2a$10$` (a literal bcrypt prefix). **Wrap the value in single quotes** as shown — double quotes let the shell expand the `$` signs and you'd end up storing an empty value.
+
+To rotate, replace `gcloud secrets create` with `gcloud secrets versions add minecraft-curseforge-api-key --data-file=-`. ESO picks up the new version on its next refresh (default 1h; force-sync via the `force-sync` annotation).
+
+### Bootstrap rollout
+
+One-time sequence the first time this lands on a cluster that already has a manually-created `minecraft-secrets`:
+
+1. Upload the existing CF API key to GCP SM with the `gcloud secrets create` command above.
+2. Delete the manually-created K8s Secret so ESO can take ownership cleanly:
+   ```bash
+   kubectl -n gaming delete secret minecraft-secrets
+   ```
+   The Minecraft pod tolerates this — it'll restart and pick up the ESO-created Secret on next pull.
+3. Merge the PR. Argo CD reconciles, ESO creates `minecraft-secrets`, the Deployment rolls.
+4. Verify: `kubectl -n argocd get application minecraft` → `Synced/Healthy`. `kubectl -n gaming get externalsecret minecraft-curseforge-key` → `SecretSynced`. Pod stays `Running`.
 
 ## First-time world pre-generation
 

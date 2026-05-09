@@ -49,8 +49,6 @@ GitOps via Argo CD. The default path is **PR → CI → merge → Argo CD reconc
 
 Argo CD's root `Application` watches `argocd/` and creates child Applications for every operator and app track. Argo CD itself is self-managing — bumping its version is a PR like any other.
 
-The Minecraft deploy still uses a legacy GitHub Actions workflow that predates the Argo CD setup. See [apps/gaming/minecraft/README.md](apps/gaming/minecraft/README.md).
-
 ---
 
 ## Operators installed
