@@ -141,12 +141,12 @@ Each bucket gets its own scoped key pair so a credential leak only affects one b
 
 ```bash
 kubectl -n garage exec garage-0 -- /garage key create cove-images
-kubectl -n garage exec garage-0 -- /garage bucket allow \
-    --read --write --owner cove-images images
+kubectl -n garage exec garage-0 -- /garage bucket allow images \
+    --key cove-images --read --write --owner
 
 kubectl -n garage exec garage-0 -- /garage key create cove-postgres-backups
-kubectl -n garage exec garage-0 -- /garage bucket allow \
-    --read --write --owner cove-postgres-backups postgres-backups
+kubectl -n garage exec garage-0 -- /garage bucket allow postgres-backups \
+    --key cove-postgres-backups --read --write --owner
 ```
 
 > **Important:** each `key create` command prints the key ID **and** the secret access key to stdout exactly once. The secret is **not retrievable later** — Garage stores it hashed. Copy both values immediately to a scratch buffer before moving on. If you lose them, delete the key (`/garage key delete <name>`) and recreate it.
@@ -287,8 +287,8 @@ Mount it on the consumer Deployment via `envFrom: [{secretRef: {name: <service>-
 # Inside the running pod:
 kubectl -n garage exec garage-0 -- /garage bucket create <new-bucket>
 kubectl -n garage exec garage-0 -- /garage key create cove-<new-bucket>
-kubectl -n garage exec garage-0 -- /garage bucket allow \
-    --read --write --owner cove-<new-bucket> <new-bucket>
+kubectl -n garage exec garage-0 -- /garage bucket allow <new-bucket> \
+    --key cove-<new-bucket> --read --write --owner
 
 # Then mirror in GCP SM (Step 5 pattern):
 echo -n "<access-key-id>" | gcloud secrets create garage-<new-bucket>-access-key \
