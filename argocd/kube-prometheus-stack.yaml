@@ -30,13 +30,20 @@ spec:
     # bumps roughly every 6-8 weeks). The 84.x line has been stable since
     # mid-March 2026.
     #
-    # No `ignoreDifferences` block is set here on first install. The chart
-    # has known drift patterns (Prometheus Operator webhook mutates
-    # ServiceMonitor labels, chart-generated random Secrets, Alertmanager
-    # config Secret content) but we'll observe what actually surfaces in
-    # this cluster and add targeted rules in a follow-up PR — same pattern
-    # as ESO (PR #5) and Garage (PR #9). Speculative ignore rules tend to
-    # mask real drift later.
+    # Drift sources observed on first reconcile (this is the post-install
+    # follow-up — same pattern as ESO PR #5 and Garage PR #9):
+    #
+    # 1. ExternalSecret/grafana-admin-creds — ESO's admission webhook
+    #    auto-fills `conversionStrategy / decodingStrategy / metadataPolicy
+    #    / nullBytePolicy` under `spec.data[].remoteRef` and
+    #    `target.deletionPolicy`. Identical fields to the other three
+    #    Applications that use ExternalSecrets.
+    #
+    # This is now the FOURTH Application with the same ExternalSecret rule.
+    # Strong case for lifting it to a cluster-wide
+    # `resource.customizations.ignoreDifferences` config in argocd-cm —
+    # tracked as a related cleanup. Until then, the same rule gets
+    # duplicated here.
     sources:
         - repoURL: https://prometheus-community.github.io/helm-charts
           chart: kube-prometheus-stack
@@ -130,6 +137,15 @@ spec:
     destination:
         server: https://kubernetes.default.svc
         namespace: monitoring
+    ignoreDifferences:
+        - group: external-secrets.io
+          kind: ExternalSecret
+          jqPathExpressions:
+              - .spec.data[].remoteRef.conversionStrategy
+              - .spec.data[].remoteRef.decodingStrategy
+              - .spec.data[].remoteRef.metadataPolicy
+              - .spec.data[].remoteRef.nullBytePolicy
+              - .spec.target.deletionPolicy
     # Mirror argocd-self / external-secrets / cnpg / garage on prune/heal:
     # auto-heal drift, never auto-prune. Pruning a kube-prometheus-stack CRD
     # via accidental kustomization removal would silently delete every
@@ -142,3 +158,6 @@ spec:
         syncOptions:
             - ServerSideApply=true
             - CreateNamespace=true
+            # Make selfHeal honor ignoreDifferences above instead of fighting
+            # the ESO webhook on every reconcile (same lesson as PR #4 / #15).
+            - RespectIgnoreDifferences=true
