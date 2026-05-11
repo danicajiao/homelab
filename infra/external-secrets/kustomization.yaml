@@ -18,5 +18,6 @@ namespace: external-secrets
 
 resources:
     - namespace.yaml
-    - cluster-secret-store.yaml
+    - cluster-secret-store-cove.yaml
+    - cluster-secret-store-homelab.yaml
     - smoke-test.yaml
