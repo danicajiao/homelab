@@ -260,6 +260,90 @@ chunky cancel
 
 ---
 
+## kubectl — Monitoring (Prometheus / Grafana / Alertmanager)
+
+```bash
+# Application + pod status
+kubectl -n argocd get application kube-prometheus-stack
+kubectl -n monitoring get pods
+
+# Inspect ServiceMonitors / PodMonitors / PrometheusRules cluster-wide
+kubectl get servicemonitors -A
+kubectl get podmonitors -A
+kubectl get prometheusrules -A
+```
+
+### Grafana
+
+```bash
+# Port-forward Grafana UI (http://localhost:3000)
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
+
+# Recover the admin password (synced from GCP SM)
+kubectl -n monitoring get secret grafana-admin-creds \
+    -o jsonpath='{.data.admin-password}' | base64 -d
+
+# Or fetch directly from GCP SM
+gcloud secrets versions access latest \
+    --secret=grafana-admin-password \
+    --project=homelab-495921
+```
+
+Login: `admin` + the password above.
+
+### Prometheus
+
+```bash
+# Port-forward Prometheus UI (http://localhost:9090)
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090
+
+# Targets:    http://localhost:9090/targets
+# Alerts:     http://localhost:9090/alerts
+# Rules:      http://localhost:9090/rules
+# PromQL UI:  http://localhost:9090/graph
+```
+
+Common PromQL starting points:
+
+```promql
+# Pod count per namespace
+count by (namespace) (kube_pod_info)
+
+# Pod memory usage (MiB) per pod in cove namespaces
+sum by (pod) (container_memory_working_set_bytes{namespace=~"cove-.*"}) / 1024 / 1024
+
+# Node CPU usage %
+100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+# Disk usage % per filesystem
+100 - ((node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100)
+
+# Pods that have restarted in the last hour
+increase(kube_pod_container_status_restarts_total[1h]) > 0
+```
+
+### Alertmanager
+
+```bash
+# Port-forward Alertmanager UI (http://localhost:9093)
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-alertmanager 9093:9093
+
+# Silences: http://localhost:9093/#/silences
+# Alerts:   http://localhost:9093/#/alerts
+```
+
+### Force a Prometheus / Grafana / Alertmanager restart
+
+```bash
+kubectl -n monitoring rollout restart statefulset prometheus-kube-prometheus-stack-prometheus
+kubectl -n monitoring rollout restart statefulset alertmanager-kube-prometheus-stack-alertmanager
+kubectl -n monitoring rollout restart statefulset kube-prometheus-stack-grafana
+```
+
+Full runbook: [docs/kube-prometheus-stack-install.md](kube-prometheus-stack-install.md).
+
+---
+
 ## k3s — Service Management
 
 ```bash
