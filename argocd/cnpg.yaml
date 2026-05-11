@@ -32,6 +32,15 @@ spec:
             parameters:
                 - name: crds.create
                   value: "true"
+                # Have the chart create a PodMonitor for the operator's
+                # /metrics endpoint, picked up by kube-prometheus-stack
+                # (#214). Off by default in the chart. The chart adds the
+                # `release: kube-prometheus-stack` label below so the default
+                # podMonitorSelector matches.
+                - name: monitoring.podMonitorEnabled
+                  value: "true"
+                - name: monitoring.podMonitorAdditionalLabels.release
+                  value: kube-prometheus-stack
     destination:
         server: https://kubernetes.default.svc
         namespace: cnpg-system

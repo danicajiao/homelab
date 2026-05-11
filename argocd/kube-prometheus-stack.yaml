@@ -1,0 +1,144 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: kube-prometheus-stack
+    namespace: argocd
+    annotations:
+        # Phase 0 install — runs alongside the other foundational Applications
+        # in wave 0. After this lands, every operator and future cove service
+        # is observable from a single Grafana. See
+        # `docs/kube-prometheus-stack-install.md` for the bootstrap runbook.
+        argocd.argoproj.io/sync-wave: "0"
+    finalizers:
+        - resources-finalizer.argocd.argoproj.io
+spec:
+    project: default
+    # Two-source Application:
+    #   1. The upstream kube-prometheus-stack Helm chart (Prometheus +
+    #      Grafana + Alertmanager + node-exporter + kube-state-metrics +
+    #      Prometheus Operator + CRDs).
+    #   2. This repo's `infra/kube-prometheus-stack/` (namespace +
+    #      ExternalSecret for the Grafana admin password + explicit
+    #      ServiceMonitor/PodMonitor manifests for operators whose charts
+    #      don't expose a ServiceMonitor knob).
+    #
+    # Bumping the chart: edit `targetRevision` below, verify the rendered
+    # output, open a PR. Latest releases:
+    # https://github.com/prometheus-community/helm-charts/releases
+    #
+    # 84.5.0 is the latest stable as of this PR (released 2026-05-01 — major
+    # bumps roughly every 6-8 weeks). The 84.x line has been stable since
+    # mid-March 2026.
+    #
+    # No `ignoreDifferences` block is set here on first install. The chart
+    # has known drift patterns (Prometheus Operator webhook mutates
+    # ServiceMonitor labels, chart-generated random Secrets, Alertmanager
+    # config Secret content) but we'll observe what actually surfaces in
+    # this cluster and add targeted rules in a follow-up PR — same pattern
+    # as ESO (PR #5) and Garage (PR #9). Speculative ignore rules tend to
+    # mask real drift later.
+    sources:
+        - repoURL: https://prometheus-community.github.io/helm-charts
+          chart: kube-prometheus-stack
+          targetRevision: 84.5.0
+          helm:
+              releaseName: kube-prometheus-stack
+              # Chart values live inline (rather than in the kustomize tree)
+              # because Argo CD handles Helm rendering natively. Mirrors the
+              # pattern used in `argocd/garage.yaml`.
+              #
+              # Verified against the chart's values.yaml at v84.5.0:
+              # https://github.com/prometheus-community/helm-charts/blob/kube-prometheus-stack-84.5.0/charts/kube-prometheus-stack/values.yaml
+              values: |
+                  # K3s runs kube-controller-manager, kube-scheduler, kube-proxy
+                  # and etcd as embedded processes inside the k3s/k3s-server
+                  # binary on the node — there are no separate pods/Services to
+                  # scrape on the default kube-prometheus-stack ports. Leaving
+                  # these enabled produces permanent "target down" alerts
+                  # without any way to fix them. Disable to keep the alerting
+                  # surface clean. (Embedded metrics ARE exposed via the k3s
+                  # binary itself on the node; wiring that up is a separate
+                  # follow-up — see `defaultRules` / `kubeStateMetrics`
+                  # coverage which already covers most cluster-level signals.)
+                  kubeControllerManager:
+                      enabled: false
+                  kubeScheduler:
+                      enabled: false
+                  kubeEtcd:
+                      enabled: false
+                  kubeProxy:
+                      enabled: false
+
+                  prometheus:
+                      prometheusSpec:
+                          # Pinned explicitly even though it matches the chart
+                          # default — surfacing the value in the Application
+                          # makes intent obvious and prevents a future chart
+                          # default bump from silently changing retention.
+                          retention: 10d
+                          # Single-node K3s → use local-path (the Rancher
+                          # local-path-provisioner shipped with K3s). 20Gi is
+                          # well above what ~10d of single-cluster retention
+                          # needs and well below the chart default 50Gi. PVC
+                          # can be expanded later (local-path supports
+                          # ResizeReclaim on recent K3s).
+                          storageSpec:
+                              volumeClaimTemplate:
+                                  spec:
+                                      storageClassName: local-path
+                                      accessModes: ["ReadWriteOnce"]
+                                      resources:
+                                          requests:
+                                              storage: 20Gi
+                  alertmanager:
+                      alertmanagerSpec:
+                          # Alertmanager state (active alerts + silences +
+                          # notification dedup) is tiny. 2Gi is generous.
+                          storage:
+                              volumeClaimTemplate:
+                                  spec:
+                                      storageClassName: local-path
+                                      accessModes: ["ReadWriteOnce"]
+                                      resources:
+                                          requests:
+                                              storage: 2Gi
+
+                  grafana:
+                      # Reads admin credentials from a K8s Secret named
+                      # `grafana-admin-creds` in the `monitoring` namespace —
+                      # materialized by the ExternalSecret in
+                      # `infra/kube-prometheus-stack/external-secret.yaml`
+                      # from GCP SM project `homelab-495921`.
+                      # Default key names (`admin-user` / `admin-password`)
+                      # match what the ExternalSecret writes.
+                      admin:
+                          existingSecret: grafana-admin-creds
+                      persistence:
+                          # Persist Grafana state across pod restarts —
+                          # dashboards saved through the UI, data source
+                          # tweaks, plugin installs. 5Gi is generous; chart-
+                          # provisioned dashboards live in ConfigMaps and
+                          # don't count against this.
+                          enabled: true
+                          type: sts
+                          storageClassName: local-path
+                          accessModes: ["ReadWriteOnce"]
+                          size: 5Gi
+        - repoURL: https://github.com/danicajiao/homelab.git
+          targetRevision: main
+          path: infra/kube-prometheus-stack
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: monitoring
+    # Mirror argocd-self / external-secrets / cnpg / garage on prune/heal:
+    # auto-heal drift, never auto-prune. Pruning a kube-prometheus-stack CRD
+    # via accidental kustomization removal would silently delete every
+    # ServiceMonitor / PodMonitor / PrometheusRule in the cluster. Manual
+    # prune is `argocd app sync kube-prometheus-stack --prune`.
+    syncPolicy:
+        automated:
+            prune: false
+            selfHeal: true
+        syncOptions:
+            - ServerSideApply=true
+            - CreateNamespace=true

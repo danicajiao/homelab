@@ -30,7 +30,8 @@ homelab/
 │   ├── argocd/                  # Argo CD itself (self-managed via app-of-apps)
 │   ├── external-secrets/        # ESO config (ClusterSecretStore + smoke test)
 │   ├── cnpg/                    # CloudNativePG operator (Phase 3 provisions clusters)
-│   └── garage/                  # Garage S3-compatible object storage
+│   ├── garage/                  # Garage S3-compatible object storage
+│   └── kube-prometheus-stack/   # Prometheus + Grafana + Alertmanager + monitors
 ├── argocd/                      # Argo CD Application manifests (the app-of-apps roots)
 ├── docs/                        # Operator runbooks
 └── .github/workflows/           # PR validation + manual deploys
@@ -61,8 +62,9 @@ Each operator has a runbook covering install, day-2 operations, and any manual b
 | External Secrets Operator | Sync GCP Secret Manager → K8s Secrets | [docs/external-secrets-install.md](docs/external-secrets-install.md) |
 | CloudNativePG (CNPG) | Postgres `Cluster` CRDs (clusters provisioned in Phase 3) | [docs/cnpg-install.md](docs/cnpg-install.md) |
 | Garage | S3-compatible object storage (`images`, `postgres-backups`) | [docs/garage-install.md](docs/garage-install.md) |
+| kube-prometheus-stack | Prometheus + Grafana + Alertmanager + node-exporter + kube-state-metrics | [docs/kube-prometheus-stack-install.md](docs/kube-prometheus-stack-install.md) |
 
-Pending Phase 0: kube-prometheus-stack, Loki + Promtail, Cloudflare Tunnel.
+Pending Phase 0: Loki + Promtail, Cloudflare Tunnel.
 
 ---
 
