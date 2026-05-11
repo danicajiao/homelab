@@ -7,7 +7,7 @@ metadata:
         # Wave 0 — a plain-manifest app track with no dependency on the
         # operator install order beyond ESO already being up (the
         # ExternalSecret here resolves against the cluster-scoped
-        # `gcp-secret-manager` ClusterSecretStore, which the
+        # `gcp-homelab` ClusterSecretStore, which the
         # `external-secrets` Application reconciles in the same wave).
         argocd.argoproj.io/sync-wave: "0"
     finalizers:

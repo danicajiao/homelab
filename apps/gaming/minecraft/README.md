@@ -31,13 +31,13 @@ kubectl get pods -n gaming -l app=minecraft
 
 ### CurseForge API key
 
-Required for downloading extra mods via `CURSEFORGE_FILES`. The value lives in **GCP Secret Manager** (project `cove-6a685`); ESO materializes it as the K8s Secret `minecraft-secrets` with key `CF_API_KEY` via [`external-secret.yaml`](external-secret.yaml). The Deployment consumes it via `secretKeyRef` — no `kubectl create secret` needed.
+Required for downloading extra mods via `CURSEFORGE_FILES`. The value lives in **GCP Secret Manager** (project `homelab-495921` — Minecraft is a homelab-only workload, so per the consumer-owns rule its secret doesn't live in the cove project; see [`docs/external-secrets-install.md`](../../../docs/external-secrets-install.md)). ESO materializes it as the K8s Secret `minecraft-secrets` with key `CF_API_KEY` via [`external-secret.yaml`](external-secret.yaml). The Deployment consumes it via `secretKeyRef` — no `kubectl create secret` needed.
 
 To upload (or rotate) the key:
 
 ```bash
 echo -n '<paste-curseforge-api-key>' | gcloud secrets create minecraft-curseforge-api-key \
-    --project cove-6a685 --data-file=- --replication-policy=automatic
+    --project homelab-495921 --data-file=- --replication-policy=automatic
 ```
 
 > [!IMPORTANT]

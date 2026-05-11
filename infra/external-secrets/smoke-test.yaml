@@ -17,7 +17,7 @@ spec:
     refreshInterval: 1h
     secretStoreRef:
         kind: ClusterSecretStore
-        name: gcp-secret-manager
+        name: gcp-cove
     target:
         name: eso-smoke-test
         creationPolicy: Owner
