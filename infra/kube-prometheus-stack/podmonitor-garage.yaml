@@ -1,0 +1,45 @@
+# Garage admin/metrics PodMonitor.
+#
+# Garage exposes its admin API (which serves Prometheus metrics) on port 3903
+# bound to `[::]:3903` inside the pod. The upstream Garage Helm chart
+# (`script/helm/garage` at the pinned tag in `argocd/garage.yaml`) deliberately
+# does NOT expose 3903 on the Kubernetes Service — see the comment in the
+# chart's values.yaml:
+#   "NOTE: the admin API is excluded for now as it is not consistent across nodes"
+#
+# So a ServiceMonitor won't reach the endpoint. A PodMonitor scrapes the pods
+# directly, which is what we want here anyway — each Garage pod's admin API is
+# node-local, and Prometheus discovering one entry per pod gives us
+# per-instance metrics. At replicas=1 there's only one pod, but the same
+# manifest scales correctly if we move to RF=3.
+#
+# Pod selector labels match the Garage chart's `selectorLabels` template
+# (`app.kubernetes.io/name: garage` + `app.kubernetes.io/instance: garage`,
+# release name = `garage` per `argocd/garage.yaml` `releaseName`).
+#
+# `release: kube-prometheus-stack` is required for the chart's default
+# podMonitorSelector to pick this up (see the matching comment on
+# `servicemonitor-argocd.yaml`).
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+    name: garage
+    namespace: monitoring
+    labels:
+        release: kube-prometheus-stack
+spec:
+    namespaceSelector:
+        matchNames:
+            - garage
+    selector:
+        matchLabels:
+            app.kubernetes.io/name: garage
+            app.kubernetes.io/instance: garage
+    podMetricsEndpoints:
+        - port: ""
+          # The chart doesn't name the admin port on the pod (it's not in the
+          # container's ports[] — Garage binds [::]:3903 internally). Use
+          # `targetPort` to scrape the pod IP on the raw port number.
+          targetPort: 3903
+          path: /metrics
+          scheme: http

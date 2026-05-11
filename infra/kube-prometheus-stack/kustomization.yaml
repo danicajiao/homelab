@@ -1,0 +1,38 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# kube-prometheus-stack — repo-managed manifests.
+#
+# Holds the `monitoring` namespace, the Grafana admin-credentials
+# ExternalSecret, and explicit ServiceMonitor/PodMonitor resources for
+# operators whose charts don't expose a ServiceMonitor knob we can flip from
+# `argocd/<operator>.yaml`.
+#
+# The chart itself (Prometheus + Grafana + Alertmanager + node-exporter +
+# kube-state-metrics + Prometheus Operator) is installed via the upstream
+# kube-prometheus-stack Helm chart, which Argo CD pulls directly — see
+# `argocd/kube-prometheus-stack.yaml` for the chart source and pinned version.
+#
+# ServiceMonitor coverage strategy (issue #214):
+#   - CNPG  → flipped `monitoring.podMonitorEnabled: true` in
+#             `argocd/cnpg.yaml` (chart knob). Operator chart auto-creates a
+#             PodMonitor at install time. Nothing to author here.
+#   - ESO   → flipped `serviceMonitor.enabled: true` in
+#             `argocd/external-secrets.yaml` (chart knob). Operator chart
+#             auto-creates a ServiceMonitor. Nothing to author here.
+#   - Argo CD → upstream `install.yaml` doesn't ship ServiceMonitors, so we
+#             author the four standard ones here
+#             (`servicemonitor-argocd.yaml`).
+#   - Garage → chart deliberately does NOT expose the admin/metrics port
+#             (3903) on the Service. PodMonitor here
+#             (`podmonitor-garage.yaml`) scrapes pods directly.
+#
+# Latest releases: https://github.com/prometheus-community/helm-charts/releases
+
+namespace: monitoring
+
+resources:
+    - namespace.yaml
+    - external-secret.yaml
+    - servicemonitor-argocd.yaml
+    - podmonitor-garage.yaml
