@@ -68,15 +68,15 @@ Pending Phase 0: kube-prometheus-stack, Loki + Promtail, Cloudflare Tunnel.
 
 ## Secrets
 
-All real secret values live in **GCP Secret Manager** (project `cove-6a685`). Nothing in `main` is ever a real secret value.
+All real secret values live in **GCP Secret Manager**, split across two projects: `cove-6a685` (cove-side workloads) and `homelab-495921` (homelab-only workloads — Minecraft, Cloudflare Tunnel, Grafana). The rule is **consumer-owns**: a secret lives in the project of whatever workload consumes it, not whichever service issued it. Two cluster-scoped stores (`gcp-cove`, `gcp-homelab`) bridge the two. Nothing in `main` is ever a real secret value.
 
 Flow:
 
-1. The value gets created in GCP Secret Manager (`gcloud secrets create ...`)
-2. An `ExternalSecret` manifest in this repo declares "materialize this in namespace X as K8s Secret Y"
+1. The value gets created in GCP Secret Manager (`gcloud secrets create ...`) in the consumer's project
+2. An `ExternalSecret` manifest in this repo declares "materialize this in namespace X as K8s Secret Y" and points at the matching `ClusterSecretStore` (`gcp-cove` or `gcp-homelab`)
 3. ESO reconciles it on its refresh interval (default 1h; force-sync via annotation)
 
-The one bootstrap exception: ESO needs GCP credentials to fetch other secrets, so its own GCP service account JSON key is planted manually as a K8s Secret. Detailed in [docs/external-secrets-install.md](docs/external-secrets-install.md).
+The one bootstrap exception: each `ClusterSecretStore` needs GCP credentials to fetch other secrets, so the per-project service account JSON keys are planted manually as K8s Secrets. Detailed in [docs/external-secrets-install.md](docs/external-secrets-install.md).
 
 `*.env` files, `secrets.yaml`, and downloaded SA keys are gitignored as belt-and-suspenders.
 

@@ -27,7 +27,7 @@ The [upstream Garage Kubernetes cookbook](https://garagehq.deuxfleurs.fr/documen
 ## Prerequisites
 
 - Argo CD already installed and the root app-of-apps reconciling (`docs/argocd-install.md`)
-- ESO + the `gcp-secret-manager` ClusterSecretStore operational ([#211](https://github.com/danicajiao/cove/issues/211) / `docs/external-secrets-install.md`) — Step 6 of this runbook depends on it
+- ESO + the `gcp-cove` ClusterSecretStore operational ([#211](https://github.com/danicajiao/cove/issues/211) / `docs/external-secrets-install.md`) — Step 6 of this runbook depends on it. (Originally introduced as `gcp-secret-manager`; renamed in [#14](https://github.com/danicajiao/homelab/issues/14) once a sibling `gcp-homelab` store landed.)
 - `kubectl` pointed at the K3s cluster
 - `gcloud` authenticated against the `cove-6a685` GCP project: `gcloud config set project cove-6a685`
 - Permission to create secrets in GCP Secret Manager (`roles/secretmanager.admin` or owner) on `cove-6a685`
@@ -266,7 +266,7 @@ spec:
     refreshInterval: 1h
     secretStoreRef:
         kind: ClusterSecretStore
-        name: gcp-secret-manager
+        name: gcp-cove
     target:
         name: <service>-s3-creds
         creationPolicy: Owner
@@ -279,7 +279,7 @@ spec:
               key: garage-images-secret-key
 ```
 
-Mount it on the consumer Deployment via `envFrom: [{secretRef: {name: <service>-s3-creds}}]`. Same `gcp-secret-manager` ClusterSecretStore, no per-namespace bootstrap needed.
+Mount it on the consumer Deployment via `envFrom: [{secretRef: {name: <service>-s3-creds}}]`. Same `gcp-cove` ClusterSecretStore, no per-namespace bootstrap needed.
 
 ## Adding more buckets later
 

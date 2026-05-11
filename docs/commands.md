@@ -159,7 +159,7 @@ The `minecraft-secrets` Secret (key: `CF_API_KEY`) is materialized by ESO from G
 # Upload (or rotate) the CurseForge API key in GCP Secret Manager.
 # Use single quotes — the key contains $ signs that the shell would expand.
 echo -n '<paste-curseforge-api-key>' | gcloud secrets create minecraft-curseforge-api-key \
-    --project cove-6a685 --data-file=- --replication-policy=automatic
+    --project homelab-495921 --data-file=- --replication-policy=automatic
 # To rotate after the secret already exists, swap `create` for:
 #   gcloud secrets versions add minecraft-curseforge-api-key --data-file=-
 # ESO picks up the new version on its next refresh (default 1h).
@@ -173,7 +173,7 @@ kubectl get externalsecret -n gaming minecraft-curseforge-key
 # Delete the materialized K8s Secret.
 # ESO will immediately recreate it from GCP SM (creationPolicy: Owner). To
 # actually remove it, delete the GCP secret AND the ExternalSecret manifest:
-#   gcloud secrets delete minecraft-curseforge-api-key --project cove-6a685
+#   gcloud secrets delete minecraft-curseforge-api-key --project homelab-495921
 #   # then remove apps/gaming/minecraft/external-secret.yaml via PR
 kubectl delete secret minecraft-secrets -n gaming
 ```
