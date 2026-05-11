@@ -1,0 +1,215 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: loki
+    namespace: argocd
+    annotations:
+        # Phase 0 install — runs alongside the other foundational Applications
+        # in wave 0. After this lands (together with `alloy`), the Grafana
+        # instance from kube-prometheus-stack gains a Loki datasource and the
+        # observability loop closes: metrics dashboards + the underlying logs
+        # in the same UI. See `docs/loki-install.md` for the bootstrap runbook.
+        argocd.argoproj.io/sync-wave: "0"
+    finalizers:
+        - resources-finalizer.argocd.argoproj.io
+spec:
+    project: default
+    # Two-source Application:
+    #   1. The upstream Loki Helm chart (Loki + the StatefulSet/Service/PVC
+    #      for the single-binary install).
+    #   2. This repo's `infra/loki/` (ExternalSecret pulling the Garage S3
+    #      credentials from GCP SM).
+    #
+    # The `monitoring` namespace itself is owned by the kube-prometheus-stack
+    # Application (#214) — we reuse it here.
+    #
+    # Bumping the chart: edit `targetRevision` below, verify the rendered
+    # output, open a PR. Latest releases:
+    # https://github.com/grafana/helm-charts/releases (filter `loki-*`)
+    #
+    # 7.0.0 is the latest stable as of this PR (released 2026-04-23,
+    # appVersion 3.6.7). 7.x is the current line; 6.x is feature-frozen.
+    sources:
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: loki
+          targetRevision: 7.0.0
+          helm:
+              releaseName: loki
+              # Chart values live inline (rather than in the kustomize tree)
+              # because Argo CD handles Helm rendering natively. Mirrors the
+              # pattern used in `argocd/kube-prometheus-stack.yaml`.
+              #
+              # Verified against the chart's values.yaml at v7.0.0:
+              # https://github.com/grafana/helm-charts/blob/loki-7.0.0/charts/loki/values.yaml
+              values: |
+                  # Single-node K3s → SingleBinary mode. SimpleScalable
+                  # becomes attractive once we add the GPU node (RF>1, separate
+                  # read/write paths). Until then, one Loki pod is simpler to
+                  # reason about and matches Garage's own single-replica
+                  # setup.
+                  deploymentMode: SingleBinary
+
+                  loki:
+                      # Multi-tenancy off — single cluster, single user.
+                      # Saves having to pass `X-Scope-OrgID` on every query
+                      # and avoids the "fake" tenant Loki injects when auth
+                      # is on but no header is sent.
+                      auth_enabled: false
+
+                      # SingleBinary uses a single replica → replication
+                      # factor 1 in the in-memory ingester ring. Chart default
+                      # (3) only makes sense in SimpleScalable / Distributed.
+                      commonConfig:
+                          replication_factor: 1
+
+                      # Required for any real install — the chart only
+                      # provides a `testSchemaConfig` by default. tsdb +
+                      # schema v13 is the current recommendation for new
+                      # installs (`docs/sources/operations/storage/schema`).
+                      # `from` is the start date of this schema window; only
+                      # bump it (and add a new entry) on future schema
+                      # migrations, never edit in place.
+                      schemaConfig:
+                          configs:
+                              - from: "2026-05-01"
+                                store: tsdb
+                                object_store: s3
+                                schema: v13
+                                index:
+                                    prefix: loki_index_
+                                    period: 24h
+
+                      # Object storage backend → Garage S3. Same in-cluster
+                      # Service the `images` / `postgres-backups` buckets use.
+                      # `region` is mandatory in the AWS SDK config but
+                      # Garage ignores its value — any non-empty string works.
+                      # `s3ForcePathStyle: true` because Garage doesn't do
+                      # virtual-hosted-style buckets. `insecure: true`
+                      # because we use http:// in-cluster (no TLS on the
+                      # Garage Service).
+                      #
+                      # All three bucket fields point at the same `loki`
+                      # bucket: with multi-tenancy off and no GEL features
+                      # in use, the admin / ruler / chunks namespaces don't
+                      # need separation. Garage doesn't enforce per-bucket
+                      # quotas anyway, so one bucket keeps the bootstrap
+                      # surface small.
+                      storage:
+                          type: s3
+                          bucketNames:
+                              chunks: loki
+                              ruler: loki
+                              admin: loki
+                          s3:
+                              endpoint: http://garage.garage.svc.cluster.local:3900
+                              region: garage
+                              s3ForcePathStyle: true
+                              insecure: true
+
+                      # 14-day retention. Enforced by the compactor (the
+                      # ingester also caps with `reject_old_samples` below,
+                      # but that's about ingest, not deletion). The compactor
+                      # needs `retention_enabled: true` and a
+                      # `delete_request_store` to actually run deletes —
+                      # without those, the limit is advisory only.
+                      limits_config:
+                          retention_period: 336h
+                          # Volume queries (used by Grafana's log volume
+                          # histogram) — chart-default `true`, pinned here
+                          # so it's obvious from the Application what's on.
+                          volume_enabled: true
+                      compactor:
+                          retention_enabled: true
+                          delete_request_store: s3
+
+                  # Disable all the non-essential sub-components the chart
+                  # would otherwise spin up:
+                  #
+                  # - gateway: NGINX in front of Loki. We have one client
+                  #   (Grafana running in-cluster) hitting Loki via Service
+                  #   DNS — no need for an extra hop.
+                  # - chunksCache / resultsCache: chart-included memcached
+                  #   StatefulSets. At our volume the in-process cache is
+                  #   plenty; memcached adds two more StatefulSets to babysit.
+                  # - lokiCanary: synthetic write/read probe DaemonSet.
+                  #   Useful at scale; noise at homelab size.
+                  # - test: chart's helm-test pod (random "Helm test" runs).
+                  # - selfMonitoring: relies on the deprecated Grafana Agent
+                  #   Operator. The unified replacement is Alloy, which we
+                  #   install separately and which collects Loki's own logs
+                  #   via the same `/var/log/pods` scrape that catches every
+                  #   other pod.
+                  # - minio: chart-bundled object storage. We use Garage.
+                  gateway:
+                      enabled: false
+                  chunksCache:
+                      enabled: false
+                  resultsCache:
+                      enabled: false
+                  lokiCanary:
+                      enabled: false
+                  test:
+                      enabled: false
+                  minio:
+                      enabled: false
+
+                  # Self-scrape by Prometheus. Chart-default `false`; flip
+                  # to expose Loki's own metrics to the kube-prometheus-stack
+                  # Prometheus. Label selector matches what
+                  # `kube-prometheus-stack`'s `serviceMonitorSelector`
+                  # expects (`release=kube-prometheus-stack`), so no extra
+                  # plumbing in `infra/kube-prometheus-stack/`.
+                  monitoring:
+                      serviceMonitor:
+                          enabled: true
+                          labels:
+                              release: kube-prometheus-stack
+                      selfMonitoring:
+                          enabled: false
+                          grafanaAgent:
+                              installOperator: false
+                      lokiCanary:
+                          enabled: false
+
+                  # SingleBinary pod config.
+                  singleBinary:
+                      replicas: 1
+                      # Local state — WAL, the boltdb-shipper / tsdb-shipper
+                      # working dir, the compactor working dir. Chunks +
+                      # indexes themselves live in Garage, so this stays
+                      # small. 10Gi is the chart default; keeping it.
+                      persistence:
+                          enabled: true
+                          storageClass: local-path
+                          size: 10Gi
+                      # Pull Garage credentials from the K8s Secret
+                      # materialized by ESO. The AWS SDK that backs Loki's
+                      # S3 client picks up `AWS_ACCESS_KEY_ID` /
+                      # `AWS_SECRET_ACCESS_KEY` from the environment
+                      # automatically — no explicit `accessKeyId` /
+                      # `secretAccessKey` needed in the storage config above.
+                      extraEnvFrom:
+                          - secretRef:
+                                name: loki-creds
+        - repoURL: https://github.com/danicajiao/homelab.git
+          targetRevision: main
+          path: infra/loki
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: monitoring
+    # Mirror argocd-self / external-secrets / cnpg / garage /
+    # kube-prometheus-stack on prune/heal: auto-heal drift, never auto-prune.
+    # Pruning the Loki StatefulSet or its PVCs (or the GitOps ExternalSecret)
+    # would either drop in-flight WAL contents or break the Garage credential
+    # path. Manual prune is `argocd app sync loki --prune`.
+    #
+    # No speculative `ignoreDifferences` — same playbook as ESO (#5), Garage
+    # (#9), kube-prometheus-stack (#18): observe what actually drifts on
+    # first reconcile in this cluster, then add targeted rules in a follow-up.
+    syncPolicy:
+        automated:
+            prune: false
+            selfHeal: true
+        syncOptions:
+            - ServerSideApply=true
+            - CreateNamespace=true

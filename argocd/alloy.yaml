@@ -1,0 +1,197 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: alloy
+    namespace: argocd
+    annotations:
+        # Phase 0 install — runs alongside `loki` (and the rest of the
+        # foundational Applications) in wave 0. Alloy is the DaemonSet that
+        # tails `/var/log/pods/*/*.log` on every node and forwards lines to
+        # the in-cluster Loki Service. See `docs/loki-install.md` for the
+        # bootstrap runbook.
+        argocd.argoproj.io/sync-wave: "0"
+    finalizers:
+        - resources-finalizer.argocd.argoproj.io
+spec:
+    project: default
+    # Two-source Application:
+    #   1. The upstream Grafana Alloy Helm chart (DaemonSet + RBAC + Service
+    #      + the ConfigMap that holds the River config).
+    #   2. This repo's `infra/alloy/` — currently empty placeholder; keeps
+    #      the two-source shape consistent across operators and gives us a
+    #      stable path for future CRs (PodLogs, etc.).
+    #
+    # The `monitoring` namespace itself is owned by the kube-prometheus-stack
+    # Application (#214) — we reuse it here.
+    #
+    # Bumping the chart: edit `targetRevision` below, verify the rendered
+    # output, open a PR. Latest releases:
+    # https://github.com/grafana/helm-charts/releases (filter `alloy-*`)
+    #
+    # 1.8.1 is the latest stable as of this PR (released 2026-05-06,
+    # appVersion v1.16.1). The 1.x chart line has been stable since 2025.
+    #
+    # Why Alloy and not Promtail: Promtail was deprecated in 2024 in favor
+    # of Alloy, the unified telemetry collector (logs + metrics + traces)
+    # that replaces Promtail, Grafana Agent, and the OTel Collector across
+    # the Grafana stack. New installs should not use Promtail.
+    # https://grafana.com/blog/2025/01/13/grafana-alloy-is-the-stable-replacement-for-grafana-agent/
+    sources:
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: alloy
+          targetRevision: 1.8.1
+          helm:
+              releaseName: alloy
+              # Verified against the chart's values.yaml at v1.8.1:
+              # https://github.com/grafana/helm-charts/blob/alloy-1.8.1/charts/alloy/values.yaml
+              values: |
+                  alloy:
+                      # Mount the host's /var/log into the Alloy container so
+                      # `local.file_match` / `loki.source.file` can see the
+                      # per-pod log files written by the container runtime.
+                      # K3s with the default containerd shim writes logs to
+                      # `/var/log/pods/<namespace>_<pod>_<uid>/<container>/*.log`.
+                      mounts:
+                          varlog: true
+                          # `dockercontainers: false` — K3s uses containerd,
+                          # not Docker, so /var/lib/docker/containers doesn't
+                          # exist on this node. The /var/log/pods path
+                          # already gives us the same content via symlinks
+                          # that the runtime maintains.
+                          dockercontainers: false
+
+                      # River config inlined here. This is the entire Alloy
+                      # pipeline: discover pods → match log files for those
+                      # pods → tail them → enrich with K8s labels → push to
+                      # Loki. River is Alloy's own config language (a DSL
+                      # Grafana invented to replace YAML pipelines).
+                      # https://grafana.com/docs/alloy/latest/reference/components/
+                      configMap:
+                          create: true
+                          content: |-
+                              // Discover every pod in the cluster. Each pod
+                              // becomes a target with a set of __meta_*
+                              // labels (namespace, pod name, node, container,
+                              // pod labels, etc.) that downstream stages
+                              // turn into Loki labels.
+                              discovery.kubernetes "pods" {
+                                role = "pod"
+                              }
+
+                              // Drop targets that aren't running on THIS
+                              // node — each DaemonSet pod only needs to
+                              // tail logs from its own node. Saves every
+                              // Alloy pod from opening file handles for
+                              // every pod in the cluster.
+                              discovery.relabel "pod_logs" {
+                                targets = discovery.kubernetes.pods.targets
+
+                                rule {
+                                  source_labels = ["__meta_kubernetes_pod_node_name"]
+                                  action        = "keep"
+                                  regex         = env("HOSTNAME")
+                                }
+
+                                // Promote __meta_* into Loki labels.
+                                // Keep the label set small and bounded —
+                                // every unique combination is a separate
+                                // log stream in Loki and high cardinality
+                                // tanks query performance.
+                                rule {
+                                  source_labels = ["__meta_kubernetes_namespace"]
+                                  target_label  = "namespace"
+                                }
+                                rule {
+                                  source_labels = ["__meta_kubernetes_pod_name"]
+                                  target_label  = "pod"
+                                }
+                                rule {
+                                  source_labels = ["__meta_kubernetes_pod_container_name"]
+                                  target_label  = "container"
+                                }
+                                rule {
+                                  source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+                                  target_label  = "app"
+                                }
+                                rule {
+                                  source_labels = ["__meta_kubernetes_pod_node_name"]
+                                  target_label  = "node"
+                                }
+
+                                // The log file path that local.file_match
+                                // needs to glob, built from the pod's UID
+                                // + container name. Matches the runtime's
+                                // /var/log/pods/<ns>_<pod>_<uid>/<container>/*.log
+                                // layout.
+                                rule {
+                                  source_labels = [
+                                    "__meta_kubernetes_pod_uid",
+                                    "__meta_kubernetes_pod_container_name",
+                                  ]
+                                  target_label  = "__path__"
+                                  separator     = "/"
+                                  replacement   = "/var/log/pods/*$1/*.log"
+                                }
+                              }
+
+                              // Watch the filesystem for log files matching
+                              // the discovered targets. Picks up new pods
+                              // and rotates files automatically.
+                              local.file_match "pod_logs" {
+                                path_targets = discovery.relabel.pod_logs.output
+                              }
+
+                              // Tail each matched file, ship lines to the
+                              // Loki write client below. Default decoder
+                              // handles both the CRI (containerd) and
+                              // Docker JSON log formats — auto-detected.
+                              loki.source.file "pod_logs" {
+                                targets    = local.file_match.pod_logs.targets
+                                forward_to = [loki.write.default.receiver]
+                              }
+
+                              // Forward to the in-cluster Loki Service. The
+                              // chart names the SingleBinary Service `loki`
+                              // (release name + Service template).
+                              loki.write "default" {
+                                endpoint {
+                                  url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+                                }
+                              }
+
+                  # ServiceMonitor for Alloy's own metrics. Label selector
+                  # matches kube-prometheus-stack's serviceMonitorSelector
+                  # (`release=kube-prometheus-stack`) so Prometheus picks
+                  # this up without any extra plumbing in
+                  # `infra/kube-prometheus-stack/`.
+                  serviceMonitor:
+                      enabled: true
+                      additionalLabels:
+                          release: kube-prometheus-stack
+
+                  controller:
+                      # DaemonSet → one Alloy pod per node. Current cluster
+                      # is single-node (one Alloy pod); the count grows
+                      # automatically when the GPU node is added.
+                      type: daemonset
+        - repoURL: https://github.com/danicajiao/homelab.git
+          targetRevision: main
+          path: infra/alloy
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: monitoring
+    # Same prune/heal pattern as every other Phase 0 Application: auto-heal
+    # drift, never auto-prune. Pruning the Alloy DaemonSet would stop log
+    # collection across the cluster with no warning. Manual prune is
+    # `argocd app sync alloy --prune`.
+    #
+    # No speculative `ignoreDifferences` — observe what actually drifts on
+    # first reconcile, then add targeted rules in a follow-up. Same
+    # playbook as ESO (#5), Garage (#9), kube-prometheus-stack (#18).
+    syncPolicy:
+        automated:
+            prune: false
+            selfHeal: true
+        syncOptions:
+            - ServerSideApply=true
+            - CreateNamespace=true

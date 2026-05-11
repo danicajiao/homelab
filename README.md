@@ -31,7 +31,9 @@ homelab/
 │   ├── external-secrets/        # ESO config (ClusterSecretStore + smoke test)
 │   ├── cnpg/                    # CloudNativePG operator (Phase 3 provisions clusters)
 │   ├── garage/                  # Garage S3-compatible object storage
-│   └── kube-prometheus-stack/   # Prometheus + Grafana + Alertmanager + monitors
+│   ├── kube-prometheus-stack/   # Prometheus + Grafana + Alertmanager + monitors
+│   ├── loki/                    # Loki log aggregation (Garage S3 backend)
+│   └── alloy/                   # Grafana Alloy log collector (DaemonSet)
 ├── argocd/                      # Argo CD Application manifests (the app-of-apps roots)
 ├── docs/                        # Operator runbooks
 └── .github/workflows/           # PR validation + manual deploys
@@ -63,8 +65,10 @@ Each operator has a runbook covering install, day-2 operations, and any manual b
 | CloudNativePG (CNPG) | Postgres `Cluster` CRDs (clusters provisioned in Phase 3) | [docs/cnpg-install.md](docs/cnpg-install.md) |
 | Garage | S3-compatible object storage (`images`, `postgres-backups`) | [docs/garage-install.md](docs/garage-install.md) |
 | kube-prometheus-stack | Prometheus + Grafana + Alertmanager + node-exporter + kube-state-metrics | [docs/kube-prometheus-stack-install.md](docs/kube-prometheus-stack-install.md) |
+| Loki | Log aggregation (Garage S3 backend, 14d retention) | [docs/loki-install.md](docs/loki-install.md) |
+| Grafana Alloy | Log collector DaemonSet (tails pod logs → Loki) | [docs/loki-install.md](docs/loki-install.md) |
 
-Pending Phase 0: Loki + Promtail, Cloudflare Tunnel.
+Pending Phase 0: Cloudflare Tunnel.
 
 ---
 

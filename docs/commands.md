@@ -344,6 +344,64 @@ Full runbook: [docs/kube-prometheus-stack-install.md](kube-prometheus-stack-inst
 
 ---
 
+## kubectl — Logs (Loki / Alloy)
+
+```bash
+# Application + pod status
+kubectl -n argocd get application loki alloy
+kubectl -n monitoring get pods -l 'app.kubernetes.io/name in (loki,alloy)'
+
+# Check the Garage credentials are synced
+kubectl -n monitoring get externalsecret loki-creds
+
+# Loki self-health
+kubectl -n monitoring port-forward svc/loki 3100:3100
+# http://localhost:3100/ready    → "ready"
+# http://localhost:3100/metrics  → loki_* metrics
+
+# Alloy UI (per-pod, on port 12345). Components view shows targets +
+# lines forwarded per pipeline stage.
+kubectl -n monitoring port-forward ds/alloy 12345:12345
+# http://localhost:12345
+```
+
+### LogQL — querying logs
+
+Grafana → Explore → switch the datasource picker (top-left) to `Loki`. The label set Alloy applies to every stream: `namespace`, `pod`, `container`, `app`, `node`.
+
+```logql
+# All logs from a namespace
+{namespace="argocd"}
+
+# All logs from one pod (exact name)
+{namespace="argocd", pod="argocd-server-7c9f8c8c8c-abcde"}
+
+# All logs from pods matching an app label
+{namespace="gaming", app="minecraft"}
+
+# All logs from a node
+{node="homelab"}
+
+# Label match + text search (case-insensitive)
+{namespace="garage"} |~ "(?i)error|fail|panic"
+
+# Parse JSON log lines (one field per parsed key)
+{namespace="cnpg-system"} | json
+
+# Top talkers — log line count per pod, last 5m
+sum by (pod) (count_over_time({namespace="monitoring"}[5m]))
+
+# Error rate per namespace, last 1m
+sum by (namespace) (rate({namespace=~".+"} |~ "(?i)error|fail|panic"[1m]))
+
+# Lines from the last 15m that contain a specific string, formatted
+{namespace="argocd"} |= "OutOfSync" | line_format "{{.pod}}: {{__line__}}"
+```
+
+Full runbook: [docs/loki-install.md](loki-install.md).
+
+---
+
 ## k3s — Service Management
 
 ```bash

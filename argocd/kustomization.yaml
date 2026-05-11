@@ -10,6 +10,8 @@ resources:
     - cnpg.yaml
     - garage.yaml
     - kube-prometheus-stack.yaml
+    - loki.yaml
+    - alloy.yaml
     - minecraft.yaml
     - apps-cove-staging.yaml
     - apps-cove-prod.yaml
