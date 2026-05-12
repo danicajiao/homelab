@@ -131,6 +131,19 @@ spec:
                           storageClassName: local-path
                           accessModes: ["ReadWriteOnce"]
                           size: 5Gi
+                      # Auto-provision the Loki datasource. The chart's
+                      # bundled Prometheus datasource is already wired in
+                      # by the subchart's defaults; this list adds Loki
+                      # alongside it without overriding the default block.
+                      # See `docs/loki-install.md` for LogQL examples.
+                      additionalDataSources:
+                          - name: Loki
+                            type: loki
+                            access: proxy
+                            url: http://loki.monitoring.svc.cluster.local:3100
+                            isDefault: false
+                            jsonData:
+                                maxLines: 1000
         - repoURL: https://github.com/danicajiao/homelab.git
           targetRevision: main
           path: infra/kube-prometheus-stack

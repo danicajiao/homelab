@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Grafana Alloy — repo-managed manifests.
+#
+# Nothing to author here at the moment. Alloy's DaemonSet, RBAC, ConfigMap
+# and Service are all rendered by the upstream Helm chart that Argo CD pulls
+# directly — see `argocd/alloy.yaml` for the chart source, pinned version,
+# and the inline River config that wires pod-log collection through to Loki.
+#
+# The `monitoring` namespace itself is owned by `infra/kube-prometheus-stack/`
+# (created when kube-prometheus-stack landed in #214) — we reuse it.
+#
+# This directory exists so the Alloy Application's second source has a
+# stable path to point at, matching the two-source pattern used by every
+# other operator. Resources may land here later (a PodLogs CR, an
+# ExternalSecret if Alloy ever needs an outbound credential, etc.).
+#
+# Latest releases: https://github.com/grafana/helm-charts/releases (filter
+# for `alloy-*`)
+
+namespace: monitoring
+
+resources: []
