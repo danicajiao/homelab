@@ -215,15 +215,34 @@ spec:
     destination:
         server: https://kubernetes.default.svc
         namespace: monitoring
+    # Drift surfaced on first reconcile (post-install follow-up — same
+    # pattern as ESO PR #5, Garage PR #9, kube-prometheus-stack PR #18):
+    #
+    # 1. ExternalSecret/loki-creds — ESO's admission webhook auto-fills
+    #    `conversionStrategy / decodingStrategy / metadataPolicy /
+    #    nullBytePolicy` under `spec.data[].remoteRef` and
+    #    `target.deletionPolicy`. Same fields as the other four
+    #    Applications that materialize ExternalSecrets.
+    #
+    # This is now the FIFTH Application with the same rule. homelab #19
+    # tracks lifting this to a cluster-wide `argocd-cm` config so we stop
+    # duplicating it on every new ESO-using Application — worth knocking
+    # out soon.
+    #
     # Mirror argocd-self / external-secrets / cnpg / garage /
     # kube-prometheus-stack on prune/heal: auto-heal drift, never auto-prune.
     # Pruning the Loki StatefulSet or its PVCs (or the GitOps ExternalSecret)
     # would either drop in-flight WAL contents or break the Garage credential
     # path. Manual prune is `argocd app sync loki --prune`.
-    #
-    # No speculative `ignoreDifferences` — same playbook as ESO (#5), Garage
-    # (#9), kube-prometheus-stack (#18): observe what actually drifts on
-    # first reconcile in this cluster, then add targeted rules in a follow-up.
+    ignoreDifferences:
+        - group: external-secrets.io
+          kind: ExternalSecret
+          jqPathExpressions:
+              - .spec.data[].remoteRef.conversionStrategy
+              - .spec.data[].remoteRef.decodingStrategy
+              - .spec.data[].remoteRef.metadataPolicy
+              - .spec.data[].remoteRef.nullBytePolicy
+              - .spec.target.deletionPolicy
     syncPolicy:
         automated:
             prune: false
@@ -231,3 +250,6 @@ spec:
         syncOptions:
             - ServerSideApply=true
             - CreateNamespace=true
+            # Make selfHeal honor ignoreDifferences above instead of fighting
+            # the ESO webhook on every reconcile (same lesson as PR #4 / #15).
+            - RespectIgnoreDifferences=true
