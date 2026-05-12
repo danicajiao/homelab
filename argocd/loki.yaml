@@ -191,6 +191,24 @@ spec:
                       extraEnvFrom:
                           - secretRef:
                                 name: loki-creds
+
+                  # Explicitly disable the SimpleScalable deployment mode's
+                  # components. `deploymentMode: SingleBinary` above only
+                  # controls what gets rendered — the chart's `validate.yaml`
+                  # template independently checks that we haven't asked for
+                  # replicas across both modes. The chart's default values
+                  # for `read` / `write` / `backend` are non-zero, which
+                  # would fail the validation with:
+                  #   "You have more than zero replicas configured for both
+                  #    the single binary and simple scalable targets."
+                  # Setting these to 0 silences the validation and prevents
+                  # any SimpleScalable pods from being created.
+                  read:
+                      replicas: 0
+                  write:
+                      replicas: 0
+                  backend:
+                      replicas: 0
         - repoURL: https://github.com/danicajiao/homelab.git
           targetRevision: main
           path: infra/loki
