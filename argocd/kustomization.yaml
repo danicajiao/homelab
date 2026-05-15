@@ -12,6 +12,7 @@ resources:
     - kube-prometheus-stack.yaml
     - loki.yaml
     - alloy.yaml
+    - cloudflare-tunnel.yaml
     - minecraft.yaml
     - apps-cove-staging.yaml
     - apps-cove-prod.yaml

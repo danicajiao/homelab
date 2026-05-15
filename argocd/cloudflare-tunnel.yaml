@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: cloudflare-tunnel
+    namespace: argocd
+    annotations:
+        # Phase 0 install — runs in wave 0 alongside the other foundational
+        # Applications. After this lands, api.coveapp.dev is publicly reachable
+        # and returns a placeholder JSON response. In Phase 1, the tunnel config
+        # is updated to route at cove-gateway instead.
+        # See `docs/cloudflare-tunnel-install.md` for the bootstrap runbook.
+        argocd.argoproj.io/sync-wave: "0"
+    finalizers:
+        - resources-finalizer.argocd.argoproj.io
+spec:
+    project: default
+    # Single-source Application — no upstream Helm chart. cloudflared is
+    # deployed directly from `infra/cloudflare-tunnel/` (Deployment +
+    # ConfigMap + ExternalSecret + placeholder NGINX). The cloudflared image
+    # version is pinned in `infra/cloudflare-tunnel/deployment.yaml`.
+    #
+    # Bumping cloudflared: edit the image tag in deployment.yaml, open a PR.
+    # Latest releases: https://github.com/cloudflare/cloudflared/releases
+    #
+    # Phase 1 migration: update the ingress rule in
+    # `infra/cloudflare-tunnel/configmap.yaml` to point at cove-gateway,
+    # remove placeholder.yaml, open a PR.
+    source:
+        repoURL: https://github.com/danicajiao/homelab.git
+        targetRevision: main
+        path: infra/cloudflare-tunnel
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: cloudflare-tunnel
+    # ESO webhook auto-fills fields on ExternalSecret at apply time —
+    # same drift pattern as the other five Applications using ExternalSecrets.
+    # homelab#19 tracks consolidating this to a cluster-wide argocd-cm rule.
+    # This is the SIXTH Application carrying this block.
+    ignoreDifferences:
+        - group: external-secrets.io
+          kind: ExternalSecret
+          jqPathExpressions:
+              - .spec.data[].remoteRef.conversionStrategy
+              - .spec.data[].remoteRef.decodingStrategy
+              - .spec.data[].remoteRef.metadataPolicy
+              - .spec.data[].remoteRef.nullBytePolicy
+              - .spec.target.deletionPolicy
+    # Mirror all other Phase 0 Applications: auto-heal drift, never
+    # auto-prune. Pruning the cloudflared Deployment would drop the tunnel
+    # connection; pruning the ExternalSecret would break credential refresh.
+    # Manual prune: `argocd app sync cloudflare-tunnel --prune`.
+    syncPolicy:
+        automated:
+            prune: false
+            selfHeal: true
+        syncOptions:
+            - ServerSideApply=true
+            - CreateNamespace=true
+            - RespectIgnoreDifferences=true

@@ -1,0 +1,31 @@
+# cloudflared tunnel config.
+#
+# Tells cloudflared which tunnel to run and where to route incoming
+# requests. The `credentials-file` path matches the Secret volume mount
+# in `deployment.yaml` — cloudflared reads the JSON directly at startup.
+#
+# Ingress rules (evaluated top-to-bottom, first match wins):
+#   1. api.coveapp.dev → placeholder NGINX in this namespace.
+#      When cove-gateway lands in Phase 1, update this service URL to
+#      point at the gateway Service (e.g.
+#      http://cove-gateway.cove-staging.svc.cluster.local:8080).
+#   2. Catch-all → 404. Required by cloudflared — every config must end
+#      with a wildcard rule.
+#
+# Bumping the tunnel ID: if the tunnel is ever recreated, update the
+# `tunnel` field here and rotate the Secret in GCP SM. The DNS CNAME
+# (`api.coveapp.dev → <id>.cfargotunnel.com`) must be updated to match.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: cloudflared-config
+    namespace: cloudflare-tunnel
+data:
+    config.yaml: |
+        tunnel: 828646eb-efcc-421e-8050-b136262f20f4
+        credentials-file: /etc/cloudflared/creds/creds.json
+
+        ingress:
+            - hostname: api.coveapp.dev
+              service: http://placeholder.cloudflare-tunnel.svc.cluster.local:80
+            - service: http_status:404
