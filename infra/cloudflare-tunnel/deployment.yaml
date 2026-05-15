@@ -1,0 +1,63 @@
+# cloudflared Deployment.
+#
+# Runs the Cloudflare Tunnel daemon that connects the cluster to the
+# public internet via Cloudflare's edge. cloudflared opens outbound
+# connections to Cloudflare — no inbound ports or LoadBalancer needed.
+#
+# Two volumes are mounted:
+#   - config (ConfigMap): the tunnel config at /etc/cloudflared/config/
+#   - creds  (Secret):    the tunnel credential JSON at /etc/cloudflared/creds/
+#     materialized by the ExternalSecret in external-secret.yaml.
+#
+# One replica is sufficient for a homelab. For HA, bump to 2 — cloudflared
+# supports multiple replicas on the same tunnel (each opens independent
+# connections to Cloudflare's edge for redundancy).
+#
+# Image: pinned to 2026.5.0 (latest stable as of this PR). To upgrade,
+# bump the tag here and verify with `kubectl rollout status`.
+# Releases: https://github.com/cloudflare/cloudflared/releases
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: cloudflared
+    namespace: cloudflare-tunnel
+    labels:
+        app: cloudflared
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: cloudflared
+    template:
+        metadata:
+            labels:
+                app: cloudflared
+        spec:
+            containers:
+                - name: cloudflared
+                  image: cloudflare/cloudflared:2026.5.0
+                  args:
+                      - tunnel
+                      - --config
+                      - /etc/cloudflared/config/config.yaml
+                      - run
+                  resources:
+                      requests:
+                          cpu: 10m
+                          memory: 64Mi
+                      limits:
+                          memory: 256Mi
+                  volumeMounts:
+                      - name: config
+                        mountPath: /etc/cloudflared/config
+                        readOnly: true
+                      - name: creds
+                        mountPath: /etc/cloudflared/creds
+                        readOnly: true
+            volumes:
+                - name: config
+                  configMap:
+                      name: cloudflared-config
+                - name: creds
+                  secret:
+                      secretName: tunnel-creds

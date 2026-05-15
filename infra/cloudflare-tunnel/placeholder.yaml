@@ -1,0 +1,73 @@
+# Placeholder service — temporary target for api.coveapp.dev.
+#
+# A minimal nginx Deployment + Service that returns a JSON "coming soon"
+# response at `/`. The tunnel config in configmap.yaml routes
+# api.coveapp.dev here until cove-gateway lands in Phase 1, at which
+# point this file and the corresponding tunnel config entry are removed.
+#
+# The custom nginx config is supplied inline via a ConfigMap so the
+# response is clearly identifiable in smoke tests (`curl api.coveapp.dev`)
+# rather than the default nginx welcome page.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: placeholder-nginx-config
+    namespace: cloudflare-tunnel
+data:
+    default.conf: |
+        server {
+            listen 80;
+            location / {
+                default_type application/json;
+                return 200 '{"status":"ok","service":"cove-api","note":"placeholder — cove-gateway lands in Phase 1"}';
+            }
+        }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: placeholder
+    namespace: cloudflare-tunnel
+    labels:
+        app: placeholder
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: placeholder
+    template:
+        metadata:
+            labels:
+                app: placeholder
+        spec:
+            containers:
+                - name: nginx
+                  image: nginx:1.27-alpine
+                  ports:
+                      - containerPort: 80
+                  resources:
+                      requests:
+                          cpu: 5m
+                          memory: 16Mi
+                      limits:
+                          memory: 64Mi
+                  volumeMounts:
+                      - name: nginx-config
+                        mountPath: /etc/nginx/conf.d
+                        readOnly: true
+            volumes:
+                - name: nginx-config
+                  configMap:
+                      name: placeholder-nginx-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+    name: placeholder
+    namespace: cloudflare-tunnel
+spec:
+    selector:
+        app: placeholder
+    ports:
+        - port: 80
+          targetPort: 80
