@@ -87,7 +87,7 @@ spec:
     #    strips those during admission (they're implicit for VCTs). Diff
     #    appears every reconcile.
     #
-    # 3. ExternalSecret/garage-images-creds — ESO's admission webhook
+    # 3. ExternalSecret/garage-cove-media-creds — ESO's admission webhook
     #    auto-fills `conversionStrategy / decodingStrategy / metadataPolicy
     #    / nullBytePolicy` and `target.deletionPolicy`. The matching rule
     #    on `argocd/external-secrets.yaml` doesn't apply here —
