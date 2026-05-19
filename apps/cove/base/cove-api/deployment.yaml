@@ -10,22 +10,8 @@
 # the GCP Secret Manager secret before deploying — see external-secret.yaml
 # for the one-time setup commands.
 #
-# imagePullSecrets references `gar-pull-secret`, a docker-registry Secret
-# bootstrapped once per namespace with a dedicated read-only GCP SA key:
-#
-#   gcloud iam service-accounts create gar-pull-reader \
-#     --project=cove-6a685 --display-name="GAR Pull Reader (K3s)"
-#   gcloud projects add-iam-policy-binding cove-6a685 \
-#     --member="serviceAccount:gar-pull-reader@cove-6a685.iam.gserviceaccount.com" \
-#     --role="roles/artifactregistry.reader"
-#   gcloud iam service-accounts keys create /tmp/gar-pull-key.json \
-#     --iam-account=gar-pull-reader@cove-6a685.iam.gserviceaccount.com
-#   kubectl create secret docker-registry gar-pull-secret \
-#     --docker-server=us-central1-docker.pkg.dev \
-#     --docker-username=_json_key \
-#     --docker-password="$(cat /tmp/gar-pull-key.json)" \
-#     -n <namespace>
-#   rm /tmp/gar-pull-key.json
+# imagePullSecrets references gar-pull-secret, which is managed by the
+# ExternalSecret in base/gar-pull-secret.yaml.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
