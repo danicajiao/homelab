@@ -4,4 +4,5 @@ kind: Kustomization
 # Cove application services. Each service lives in its own subdirectory;
 # overlays set environment-specific values (image tag, replica count, etc.).
 resources:
+    - gar-pull-secret.yaml
     - cove-api/

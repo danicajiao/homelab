@@ -9,6 +9,9 @@
 # will not start (volume mount fails) until that Secret exists, so create
 # the GCP Secret Manager secret before deploying — see external-secret.yaml
 # for the one-time setup commands.
+#
+# imagePullSecrets references gar-pull-secret, which is managed by the
+# ExternalSecret in base/gar-pull-secret.yaml.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,6 +26,8 @@ spec:
             labels:
                 app: cove-api
         spec:
+            imagePullSecrets:
+                - name: gar-pull-secret
             containers:
                 - name: cove-api
                   image: us-central1-docker.pkg.dev/cove-6a685/services/cove-api
