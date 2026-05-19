@@ -1,0 +1,17 @@
+# ClusterIP Service for cove-api.
+#
+# The Cloudflare Tunnel routes to this Service directly via in-cluster DNS
+# (http://cove-api.<namespace>.svc.cluster.local:8080). No traditional
+# Ingress resource is needed — the tunnel config update in #234 wires up
+# that routing.
+apiVersion: v1
+kind: Service
+metadata:
+    name: cove-api
+spec:
+    selector:
+        app: cove-api
+    ports:
+        - port: 8080
+          targetPort: 8080
+    type: ClusterIP
