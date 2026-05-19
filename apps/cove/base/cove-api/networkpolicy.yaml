@@ -1,0 +1,31 @@
+# NetworkPolicy for cove-api.
+#
+# Allows ingress on port 8080 only from the cloudflare-tunnel namespace —
+# the Cloudflare Tunnel pod is the only legitimate external caller in
+# Phase 1. All other ingress is denied by default.
+#
+# In Phase 2+ this policy grows: downstream services (cove-image,
+# cove-product, cove-user) will each have their own NetworkPolicy that
+# only accepts traffic from cove-api, mirroring the X-Cove-Uid header
+# trust model described in docs/BACKEND_INFRASTRUCTURE.md.
+#
+# Note: K3s ships with flannel which does not enforce NetworkPolicy.
+# This manifest is declarative intent — it becomes active if the cluster
+# is migrated to a policy-enforcing CNI (e.g. Cilium or Calico).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: cove-api
+spec:
+    podSelector:
+        matchLabels:
+            app: cove-api
+    policyTypes:
+        - Ingress
+    ingress:
+        - from:
+              - namespaceSelector:
+                    matchLabels:
+                        kubernetes.io/metadata.name: cloudflare-tunnel
+          ports:
+              - port: 8080

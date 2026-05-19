@@ -1,6 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Cove application services (cove-gateway, cove-product, cove-user, cove-image).
-# Empty until Phase 1 starts — sub-issues add manifests here as services come online.
-resources: []
+# Cove application services. Each service lives in its own subdirectory;
+# overlays set environment-specific values (image tag, replica count, etc.).
+resources:
+    - cove-api/

@@ -9,3 +9,10 @@ namespace: cove-staging
 
 resources:
     - ../../base
+
+# Pin cove-api to the most recent successful CI build from the Phase 1
+# integration branch. Update this tag each time a new build is promoted
+# to staging.
+images:
+    - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-api
+      newTag: sha-0413d2b6daabf6c0a1fbadc689ff9ccf6c175173

@@ -1,0 +1,64 @@
+# cove-api Deployment.
+#
+# Image tag is intentionally absent — the staging and prod overlays each
+# pin their own sha-* tag via the Kustomize `images:` transformer so the
+# base remains environment-agnostic.
+#
+# FIREBASE_CREDENTIALS_PATH points to the service account JSON
+# materialised by the ExternalSecret in external-secret.yaml. The pod
+# will not start (volume mount fails) until that Secret exists, so create
+# the GCP Secret Manager secret before deploying — see external-secret.yaml
+# for the one-time setup commands.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: cove-api
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: cove-api
+    template:
+        metadata:
+            labels:
+                app: cove-api
+        spec:
+            containers:
+                - name: cove-api
+                  image: us-central1-docker.pkg.dev/cove-6a685/services/cove-api
+                  ports:
+                      - containerPort: 8080
+                  env:
+                      - name: PORT
+                        value: "8080"
+                      - name: FIREBASE_CREDENTIALS_PATH
+                        value: /secrets/firebase/credentials.json
+                  volumeMounts:
+                      - name: firebase-credentials
+                        mountPath: /secrets/firebase
+                        readOnly: true
+                  livenessProbe:
+                      httpGet:
+                          path: /health
+                          port: 8080
+                      initialDelaySeconds: 10
+                      periodSeconds: 15
+                      failureThreshold: 3
+                  readinessProbe:
+                      httpGet:
+                          path: /health
+                          port: 8080
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                      failureThreshold: 3
+                  resources:
+                      requests:
+                          cpu: 50m
+                          memory: 64Mi
+                      limits:
+                          cpu: 200m
+                          memory: 128Mi
+            volumes:
+                - name: firebase-credentials
+                  secret:
+                      secretName: cove-api-firebase-credentials
