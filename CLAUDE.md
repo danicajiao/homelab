@@ -24,18 +24,21 @@ git pull  # always — before touching anything
 Always set the remote upstream on the first push (`-u`). This lets subsequent `git pull` and `git push` calls work without specifying the remote explicitly.
 
 ```bash
-git checkout -b fix/234-staging-subdomain
+git checkout -b bug/COVE-234-staging-subdomain
 # ... commit changes ...
-git push -u origin fix/234-staging-subdomain  # -u on first push, always
+git push -u origin bug/COVE-234-staging-subdomain  # -u on first push, always
 ```
 
 ---
 
 ## Branch Naming
 
-Format: `<label>/<issue-id>-<description-in-kebab-case>`
+Format: `<label>/<REPO>-<issue-number>-<short-description-in-kebab-case>`
 
-Issue IDs refer to issues in `danicajiao/cove` (infrastructure work is tracked there).
+When no GitHub issue exists for the change, omit the `<REPO>-<issue-number>` segment:
+`<label>/<short-description-in-kebab-case>`
+
+The `<REPO>` prefix is always ALL CAPS. All infrastructure work is tracked in `danicajiao/cove`, so the prefix is always `COVE` — even though the branch lives in this repo.
 
 | Label | Use |
 |---|---|
@@ -45,10 +48,13 @@ Issue IDs refer to issues in `danicajiao/cove` (infrastructure work is tracked t
 | `docs/` | Documentation-only changes |
 | `chore/` | Maintenance, operator bumps, tooling |
 
-Examples:
-- `feature/234-cloudflare-tunnel-routing`
-- `bug/234-staging-subdomain-single-level`
+Examples — with issue:
+- `feature/COVE-234-cloudflare-tunnel-routing`
+- `bug/COVE-234-staging-subdomain-single-level`
+
+Examples — no issue (off-cycle fixes):
 - `chore/bump-cloudflared-2026-6`
+- `docs/update-secrets-runbook`
 
 ---
 
