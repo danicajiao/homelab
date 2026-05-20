@@ -24,9 +24,9 @@ git pull  # always — before touching anything
 Always set the remote upstream on the first push (`-u`). This lets subsequent `git pull` and `git push` calls work without specifying the remote explicitly.
 
 ```bash
-git checkout -b fix/234-staging-subdomain
+git checkout -b bug/COVE-234-staging-subdomain
 # ... commit changes ...
-git push -u origin fix/234-staging-subdomain  # -u on first push, always
+git push -u origin bug/COVE-234-staging-subdomain  # -u on first push, always
 ```
 
 ---

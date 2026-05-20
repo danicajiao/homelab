@@ -95,9 +95,9 @@ The one bootstrap exception: each `ClusterSecretStore` needs GCP credentials to 
 Always `git pull` immediately after switching to an existing branch. Always set the remote upstream on the first push:
 
 ```bash
-git checkout -b feature/234-my-change
+git checkout -b feature/COVE-234-my-change
 # ... commit ...
-git push -u origin feature/234-my-change  # -u on first push
+git push -u origin feature/COVE-234-my-change  # -u on first push
 ```
 
 ### Pull requests
