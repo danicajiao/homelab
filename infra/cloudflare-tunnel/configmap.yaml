@@ -5,16 +5,25 @@
 # in `deployment.yaml` — cloudflared reads the JSON directly at startup.
 #
 # Ingress rules (evaluated top-to-bottom, first match wins):
-#   1. api.coveapp.dev → placeholder NGINX in this namespace.
-#      When cove-gateway lands in Phase 1, update this service URL to
-#      point at the gateway Service (e.g.
-#      http://cove-gateway.cove-staging.svc.cluster.local:8080).
-#   2. Catch-all → 404. Required by cloudflared — every config must end
+#   1. api.staging.coveapp.dev → cove-api in cove-staging namespace.
+#      TestFlight and debug iOS builds target this hostname.
+#   2. api.coveapp.dev → cove-api in cove-prod namespace.
+#      App Store release builds target this hostname.
+#   3. Catch-all → 404. Required by cloudflared — every config must end
 #      with a wildcard rule.
 #
+# cove-api is the sole public gateway — all other services (cove-image,
+# cove-product, cove-user) are internal-only and reached via in-cluster
+# DNS from cove-api. No additional CNAMEs or ingress rules are needed as
+# new services are added.
+#
+# DNS CNAMEs (both point to the same tunnel):
+#   api.staging.coveapp.dev → 828646eb-efcc-421e-8050-b136262f20f4.cfargotunnel.com
+#   api.coveapp.dev         → 828646eb-efcc-421e-8050-b136262f20f4.cfargotunnel.com
+#
 # Bumping the tunnel ID: if the tunnel is ever recreated, update the
-# `tunnel` field here and rotate the Secret in GCP SM. The DNS CNAME
-# (`api.coveapp.dev → <id>.cfargotunnel.com`) must be updated to match.
+# `tunnel` field here, rotate the Secret in GCP SM, and update both
+# DNS CNAMEs in the Cloudflare dashboard.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -26,6 +35,8 @@ data:
         credentials-file: /etc/cloudflared/creds/creds.json
 
         ingress:
+            - hostname: api.staging.coveapp.dev
+              service: http://cove-api.cove-staging.svc.cluster.local:8080
             - hostname: api.coveapp.dev
-              service: http://placeholder.cloudflare-tunnel.svc.cluster.local:80
+              service: http://cove-api.cove-prod.svc.cluster.local:8080
             - service: http_status:404
