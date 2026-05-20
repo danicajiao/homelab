@@ -102,7 +102,7 @@ git push -u origin feature/234-my-change  # -u on first push
 
 ### Pull requests
 
-Every change goes through a PR — no direct pushes to `main`. Branch names follow `<label>/<issue-id>-<description>`. Issue IDs refer to issues in `danicajiao/cove`, where all infrastructure work is tracked.
+Every change goes through a PR — no direct pushes to `main`. Branch names follow `<label>/<REPO>-<issue-number>-<description>` when a GitHub issue exists, or `<label>/<description>` for off-cycle changes with no issue. The `<REPO>` prefix is ALL CAPS — always `COVE` since all infrastructure work is tracked in `danicajiao/cove`.
 
 When referencing issues or PRs across repos, use the fully qualified format so GitHub links them correctly:
 
