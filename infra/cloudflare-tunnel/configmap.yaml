@@ -5,7 +5,7 @@
 # in `deployment.yaml` — cloudflared reads the JSON directly at startup.
 #
 # Ingress rules (evaluated top-to-bottom, first match wins):
-#   1. api.staging.coveapp.dev → cove-api in cove-staging namespace.
+#   1. staging-api.coveapp.dev → cove-api in cove-staging namespace.
 #      TestFlight and debug iOS builds target this hostname.
 #   2. api.coveapp.dev → cove-api in cove-prod namespace.
 #      App Store release builds target this hostname.
@@ -18,7 +18,7 @@
 # new services are added.
 #
 # DNS CNAMEs (both point to the same tunnel):
-#   api.staging.coveapp.dev → 828646eb-efcc-421e-8050-b136262f20f4.cfargotunnel.com
+#   staging-api.coveapp.dev → 828646eb-efcc-421e-8050-b136262f20f4.cfargotunnel.com
 #   api.coveapp.dev         → 828646eb-efcc-421e-8050-b136262f20f4.cfargotunnel.com
 #
 # Bumping the tunnel ID: if the tunnel is ever recreated, update the
@@ -35,7 +35,7 @@ data:
         credentials-file: /etc/cloudflared/creds/creds.json
 
         ingress:
-            - hostname: api.staging.coveapp.dev
+            - hostname: staging-api.coveapp.dev
               service: http://cove-api.cove-staging.svc.cluster.local:8080
             - hostname: api.coveapp.dev
               service: http://cove-api.cove-prod.svc.cluster.local:8080
