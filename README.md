@@ -88,6 +88,33 @@ The one bootstrap exception: each `ClusterSecretStore` needs GCP credentials to 
 
 ---
 
+## Contributing
+
+### Git workflow
+
+Always `git pull` immediately after switching to an existing branch. Always set the remote upstream on the first push:
+
+```bash
+git checkout -b feature/234-my-change
+# ... commit ...
+git push -u origin feature/234-my-change  # -u on first push
+```
+
+### Pull requests
+
+Every change goes through a PR — no direct pushes to `main`. Branch names follow `<label>/<issue-id>-<description>`. Issue IDs refer to issues in `danicajiao/cove`, where all infrastructure work is tracked.
+
+When referencing issues or PRs across repos, use the fully qualified format so GitHub links them correctly:
+
+```
+danicajiao/cove#234     ← referencing a cove issue from a homelab PR
+danicajiao/homelab#28   ← referencing a homelab PR from a cove PR
+```
+
+Note: `Closes owner/repo#N` does not auto-close cross-repo.
+
+---
+
 ## More
 
 - Hardware / network / SSH: [docs/node-setup.md](docs/node-setup.md)
