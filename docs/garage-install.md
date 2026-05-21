@@ -1,18 +1,18 @@
 # Garage Install Runbook
 
-> One-time install of [Garage](https://garagehq.deuxfleurs.fr/) — an S3-compatible object store — on the homelab K3s cluster, plus the manual bootstrap that brings up the cluster layout, the `images` and `postgres-backups` buckets, and two scoped access key pairs stored in **GCP Secret Manager** (project `cove-6a685`). After this runbook, every service that needs S3 storage can declare an `ExternalSecret` against those keys and talk to `http://garage.garage.svc.cluster.local:3900` like any other S3 endpoint.
+> One-time install of [Garage](https://garagehq.deuxfleurs.fr/) — an S3-compatible object store — on the homelab K3s cluster, plus the manual bootstrap that brings up the cluster layout, the `cove-media` and `postgres-backups` buckets, and two scoped access key pairs stored in **GCP Secret Manager** (project `cove-6a685`). After this runbook, every service that needs S3 storage can declare an `ExternalSecret` against those keys and talk to `http://garage.garage.svc.cluster.local:3900` like any other S3 endpoint.
 
 ## What this sets up
 
 - Garage running in the `garage` namespace as a single-replica StatefulSet, installed via the upstream Helm chart at a pinned git tag (the chart lives inside the Garage source repo at `script/helm/garage`, not in a Helm repo)
 - PVC-backed persistence: 2Gi for metadata, 20Gi for object data, both on the K3s default `local-path` storage class
 - A single-node cluster layout: replication factor 1, zone `dc1`
-- Two buckets: `images` (product images for Phase 2 services + imgproxy source) and `postgres-backups` (CNPG backup destination, Phase 3)
-- Two scoped access key pairs (`cove-images`, `cove-postgres-backups`) — each scoped read/write/owner to exactly one bucket
+- Two buckets: `cove-media` (product images for Phase 2 services + imgproxy source) and `postgres-backups` (CNPG backup destination, Phase 3)
+- Two scoped access key pairs (`cove-media`, `cove-postgres-backups`) — each scoped read/write/owner to exactly one bucket
 - Four GCP Secret Manager entries holding those key pairs:
-    - `garage-images-access-key`, `garage-images-secret-key`
+    - `garage-cove-media-access-key`, `garage-cove-media-secret-key`
     - `garage-postgres-backups-access-key`, `garage-postgres-backups-secret-key`
-- A smoke-test `ExternalSecret` (`garage-images-creds`) in the `garage` namespace that pulls the `images` keys from GCP SM and materializes them as a K8s Secret with `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` keys, ready to consume via `envFrom`
+- A smoke-test `ExternalSecret` (`garage-cove-media-creds`) in the `garage` namespace that pulls the `cove-media` keys from GCP SM and materializes them as a K8s Secret with `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` keys, ready to consume via `envFrom`
 
 All of this is reconciled by Argo CD via the `garage` Application at `argocd/garage.yaml`. The Application is two-source: source 1 is the upstream Helm chart pulled from the Garage git repo, source 2 is `infra/garage/` (namespace + smoke-test ExternalSecret).
 
@@ -38,9 +38,9 @@ The [upstream Garage Kubernetes cookbook](https://garagehq.deuxfleurs.fr/documen
 homelab/
 ├── infra/
 │   └── garage/
-│       ├── kustomization.yaml          # namespace + smoke-test ExternalSecret
+│       ├── kustomization.yaml             # namespace + smoke-test ExternalSecret
 │       ├── namespace.yaml
-│       └── external-secret-images.yaml # garage-images-creds (smoke test)
+│       └── external-secret-cove-media.yaml # garage-cove-media-creds (smoke test)
 └── argocd/
     └── garage.yaml                     # two-source Application (chart + this dir)
 ```
@@ -123,7 +123,7 @@ The node should now show `HEALTHY` with the capacity and zone you assigned.
 ## Step 3 — Create buckets
 
 ```bash
-kubectl -n garage exec garage-0 -- /garage bucket create images
+kubectl -n garage exec garage-0 -- /garage bucket create cove-media
 kubectl -n garage exec garage-0 -- /garage bucket create postgres-backups
 ```
 
@@ -140,9 +140,9 @@ Both buckets should appear with no aliases and zero objects.
 Each bucket gets its own scoped key pair so a credential leak only affects one bucket.
 
 ```bash
-kubectl -n garage exec garage-0 -- /garage key create cove-images
-kubectl -n garage exec garage-0 -- /garage bucket allow images \
-    --key cove-images --read --write --owner
+kubectl -n garage exec garage-0 -- /garage key create cove-media
+kubectl -n garage exec garage-0 -- /garage bucket allow cove-media \
+    --key cove-media --read --write --owner
 
 kubectl -n garage exec garage-0 -- /garage key create cove-postgres-backups
 kubectl -n garage exec garage-0 -- /garage bucket allow postgres-backups \
@@ -153,15 +153,15 @@ kubectl -n garage exec garage-0 -- /garage bucket allow postgres-backups \
 
 You should now have, captured locally, four values:
 
-- `cove-images` access key ID
-- `cove-images` secret access key
+- `cove-media` access key ID
+- `cove-media` secret access key
 - `cove-postgres-backups` access key ID
 - `cove-postgres-backups` secret access key
 
 Verify the bucket→key bindings:
 
 ```bash
-kubectl -n garage exec garage-0 -- /garage bucket info images
+kubectl -n garage exec garage-0 -- /garage bucket info cove-media
 kubectl -n garage exec garage-0 -- /garage bucket info postgres-backups
 ```
 
@@ -172,10 +172,10 @@ Each bucket should list its corresponding key with `RWO` (read, write, owner).
 Push each of the four values into Secret Manager. `echo -n` avoids the trailing newline (matters — S3 SDKs treat the secret literally).
 
 ```bash
-echo -n "<cove-images-access-key-id>" | gcloud secrets create garage-images-access-key \
+echo -n "<cove-media-access-key-id>" | gcloud secrets create garage-cove-media-access-key \
     --project cove-6a685 --data-file=- --replication-policy=automatic
 
-echo -n "<cove-images-secret-access-key>" | gcloud secrets create garage-images-secret-key \
+echo -n "<cove-media-secret-access-key>" | gcloud secrets create garage-cove-media-secret-key \
     --project cove-6a685 --data-file=- --replication-policy=automatic
 
 echo -n "<cove-postgres-backups-access-key-id>" | gcloud secrets create garage-postgres-backups-access-key \
@@ -195,46 +195,46 @@ Once verified, scrub the keys from your scratch buffer / shell history. The clus
 
 ## Step 6 — Force-sync the smoke-test ExternalSecret
 
-The `garage-images-creds` ExternalSecret has been failing with `SecretSyncedError` since the chart Application reconciled (the GCP secrets didn't exist yet). Now that they do, force a sync:
+The `garage-cove-media-creds` ExternalSecret has been failing with `SecretSyncedError` since the chart Application reconciled (the GCP secrets didn't exist yet). Now that they do, force a sync:
 
 ```bash
-kubectl -n garage annotate externalsecret garage-images-creds \
+kubectl -n garage annotate externalsecret garage-cove-media-creds \
     force-sync=$(date +%s) --overwrite
 ```
 
 Verify the K8s Secret materializes:
 
 ```bash
-kubectl -n garage get externalsecret garage-images-creds
-kubectl -n garage get secret garage-images-creds -o yaml
+kubectl -n garage get externalsecret garage-cove-media-creds
+kubectl -n garage get secret garage-cove-media-creds -o yaml
 ```
 
 Status should be `SecretSynced` / `Ready`. The Secret should have `data.AWS_ACCESS_KEY_ID` and `data.AWS_SECRET_ACCESS_KEY` populated. Spot-check a value:
 
 ```bash
-kubectl -n garage get secret garage-images-creds \
+kubectl -n garage get secret garage-cove-media-creds \
     -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d
-# → should match the cove-images access key ID from Step 4
+# → should match the cove-media access key ID from Step 4
 ```
 
 ## Step 7 — Smoke test the S3 round-trip
 
-End-to-end check: a temporary pod uses the synced credentials to PUT, GET, and DELETE an object in the `images` bucket via the in-cluster S3 endpoint.
+End-to-end check: a temporary pod uses the synced credentials to PUT, GET, and DELETE an object in the `cove-media` bucket via the in-cluster S3 endpoint.
 
 ```bash
 kubectl -n garage run s3-smoke --rm -i --tty --restart=Never \
     --image=amazon/aws-cli:latest \
-    --env="AWS_ACCESS_KEY_ID=$(kubectl -n garage get secret garage-images-creds -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)" \
-    --env="AWS_SECRET_ACCESS_KEY=$(kubectl -n garage get secret garage-images-creds -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)" \
+    --env="AWS_ACCESS_KEY_ID=$(kubectl -n garage get secret garage-cove-media-creds -o jsonpath='{.data.AWS_ACCESS_KEY_ID}' | base64 -d)" \
+    --env="AWS_SECRET_ACCESS_KEY=$(kubectl -n garage get secret garage-cove-media-creds -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d)" \
     --env="AWS_DEFAULT_REGION=garage" \
     --command -- sh -c '
         set -e
         ENDPOINT=http://garage.garage.svc.cluster.local:3900
         echo "hello-from-garage" > /tmp/probe.txt
-        aws --endpoint-url $ENDPOINT s3 cp /tmp/probe.txt s3://images/probe.txt
-        aws --endpoint-url $ENDPOINT s3 cp s3://images/probe.txt /tmp/probe-readback.txt
+        aws --endpoint-url $ENDPOINT s3 cp /tmp/probe.txt s3://cove-media/probe.txt
+        aws --endpoint-url $ENDPOINT s3 cp s3://cove-media/probe.txt /tmp/probe-readback.txt
         diff /tmp/probe.txt /tmp/probe-readback.txt && echo "ROUND-TRIP OK"
-        aws --endpoint-url $ENDPOINT s3 rm s3://images/probe.txt
+        aws --endpoint-url $ENDPOINT s3 rm s3://cove-media/probe.txt
         echo "DELETE OK"
     '
 ```
@@ -254,7 +254,7 @@ That's it — Garage is up, both buckets exist, both key pairs work, ESO is wire
 
 ## How to add a new bucket consumer
 
-When a Phase 1+ service needs access to `images` or `postgres-backups`, create an `ExternalSecret` in **its** namespace pointing at the same GCP secrets:
+When a Phase 1+ service needs access to `cove-media` or `postgres-backups`, create an `ExternalSecret` in **its** namespace pointing at the same GCP secrets:
 
 ```yaml
 apiVersion: external-secrets.io/v1
@@ -273,10 +273,10 @@ spec:
     data:
         - secretKey: AWS_ACCESS_KEY_ID
           remoteRef:
-              key: garage-images-access-key
+              key: garage-cove-media-access-key
         - secretKey: AWS_SECRET_ACCESS_KEY
           remoteRef:
-              key: garage-images-secret-key
+              key: garage-cove-media-secret-key
 ```
 
 Mount it on the consumer Deployment via `envFrom: [{secretRef: {name: <service>-s3-creds}}]`. Same `gcp-cove` ClusterSecretStore, no per-namespace bootstrap needed.
@@ -297,7 +297,7 @@ echo -n "<secret-access-key>" | gcloud secrets create garage-<new-bucket>-secret
     --project cove-6a685 --data-file=- --replication-policy=automatic
 ```
 
-If you want a smoke-test ExternalSecret in this repo for the new bucket, mirror `infra/garage/external-secret-images.yaml` and add it to `infra/garage/kustomization.yaml`.
+If you want a smoke-test ExternalSecret in this repo for the new bucket, mirror `infra/garage/external-secret-cove-media.yaml` and add it to `infra/garage/kustomization.yaml`.
 
 ---
 

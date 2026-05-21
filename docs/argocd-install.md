@@ -185,7 +185,7 @@ If something goes catastrophically wrong, revert the PR — Argo CD will reconci
 
 ### Adding a new platform operator (#211–#216)
 
-For each future operator (External Secrets Operator, CloudNativePG, MinIO, kube-prometheus-stack, Loki, Cloudflare Tunnel):
+For each future operator (External Secrets Operator, CloudNativePG, Garage, kube-prometheus-stack, Loki, Cloudflare Tunnel):
 
 1. Add manifests under `infra/<operator-name>/` with a `kustomization.yaml`.
 2. Add a new Application manifest at `argocd/<operator-name>.yaml` pointing at that directory.
@@ -314,11 +314,11 @@ The bootstrap is idempotent.
 
 ## What's next
 
-- [#211](https://github.com/danicajiao/cove-ios/issues/211) External Secrets Operator
-- [#212](https://github.com/danicajiao/cove-ios/issues/212) CloudNativePG
-- [#213](https://github.com/danicajiao/cove-ios/issues/213) MinIO
-- [#214](https://github.com/danicajiao/cove-ios/issues/214) kube-prometheus-stack
-- [#215](https://github.com/danicajiao/cove-ios/issues/215) Loki + Promtail
-- [#216](https://github.com/danicajiao/cove-ios/issues/216) Cloudflare Tunnel
+All Phase 0 operators below are now installed — each followed the **adding a new platform operator** pattern in this doc. Two swapped implementations during bootstrap: MinIO → Garage (see [garage-install.md](garage-install.md)) and Promtail → Grafana Alloy (see [loki-install.md](loki-install.md)).
 
-Each follows the **adding a new platform operator** pattern in this doc.
+- [danicajiao/cove#211](https://github.com/danicajiao/cove/issues/211) External Secrets Operator
+- [danicajiao/cove#212](https://github.com/danicajiao/cove/issues/212) CloudNativePG
+- [danicajiao/cove#213](https://github.com/danicajiao/cove/issues/213) Object storage (shipped as Garage, not MinIO)
+- [danicajiao/cove#214](https://github.com/danicajiao/cove/issues/214) kube-prometheus-stack
+- [danicajiao/cove#215](https://github.com/danicajiao/cove/issues/215) Loki (log collector shipped as Alloy, not Promtail)
+- [danicajiao/cove#216](https://github.com/danicajiao/cove/issues/216) Cloudflare Tunnel
