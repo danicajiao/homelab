@@ -4,12 +4,12 @@ Manifests for the [Cove iOS app](https://github.com/danicajiao/cove)'s self-host
 
 ## Status
 
-**Phase 0 in progress** — cluster bootstrap, no Cove services running yet. Phase 0 stands up the platform (Argo CD, External Secrets Operator, CloudNativePG, Garage, observability, Cloudflare Tunnel) and the namespaces for staging/prod. Phase 1+ ship the actual services.
+**Phase 1 complete** — the `cove-api` gateway is deployed to `cove-staging` and `cove-prod` behind the Cloudflare Tunnel. Phase 0 stood up the platform (Argo CD, External Secrets Operator, CloudNativePG, Garage, observability, Cloudflare Tunnel) and the staging/prod namespaces. Phases 2–3 ship the remaining services.
 
 | Phase | What lands here |
 |---|---|
-| Phase 0 (now) | Empty `cove-staging` / `cove-prod` namespaces, Argo CD overlay scaffolding |
-| Phase 1 | Gateway service |
+| Phase 0 | Empty `cove-staging` / `cove-prod` namespaces, Argo CD overlay scaffolding |
+| Phase 1 (done) | `cove-api` gateway (Deployment, Service, NetworkPolicy, ExternalSecret) |
 | Phase 2 | Image service (`cove-image` + imgproxy) |
 | Phase 3 | Product, User services + CNPG `Cluster` resources for their data |
 
@@ -17,24 +17,26 @@ Manifests for the [Cove iOS app](https://github.com/danicajiao/cove)'s self-host
 
 ```
 apps/cove/
-├── base/                 # shared manifests (currently empty placeholder)
+├── base/                 # shared manifests
+│   ├── gar-pull-secret.yaml   # ExternalSecret for GAR image pulls
+│   └── cove-api/              # Deployment, Service, NetworkPolicy, ExternalSecret
 └── overlays/
-    ├── staging/          # → reconciled into the cove-staging namespace
-    └── prod/             # → reconciled into the cove-prod namespace
+    ├── staging/          # → cove-staging namespace; pins the staging cove-api image tag
+    └── prod/             # → cove-prod namespace; pins the prod cove-api image tag
 ```
 
-The `cove-staging` and `cove-prod` Argo CD Applications (in [`argocd/`](../../argocd/)) point at these overlays. As Phase 1+ services land, they get added in `base/` with environment-specific tweaks in each overlay.
+The `cove-staging` and `cove-prod` Argo CD Applications (in [`argocd/`](../../argocd/)) point at these overlays. Each overlay pins its own `sha-*` image tag for `cove-api` via the Kustomize `images:` transformer so the base stays environment-agnostic. As Phase 2+ services land, they get added in `base/` with environment-specific tweaks in each overlay.
 
 ## Infra this depends on
 
-When services start landing, they'll lean on the operators installed in Phase 0:
+`cove-api` already leans on the operators installed in Phase 0, and later services add more:
 
 | Service need | Operator | Runbook |
 |---|---|---|
-| Postgres database | CloudNativePG → declare a `Cluster` resource in the overlay | [docs/cnpg-install.md](../../docs/cnpg-install.md) |
-| Object storage (images, backups) | Garage → use `AWS_*` env vars from synced K8s Secret | [docs/garage-install.md](../../docs/garage-install.md) |
-| Service credentials at runtime | ESO → declare an `ExternalSecret` referencing GCP Secret Manager | [docs/external-secrets-install.md](../../docs/external-secrets-install.md) |
-| External traffic | Cloudflare Tunnel (Phase 0, pending) | TBD |
+| External traffic | Cloudflare Tunnel routes `api.coveapp.dev` → the `cove-api` Service (in-cluster DNS) | — (manifests in [`infra/cloudflare-tunnel/`](../../infra/cloudflare-tunnel/)) |
+| Service credentials at runtime | ESO → `ExternalSecret` syncs the Firebase service-account JSON from GCP Secret Manager | [docs/external-secrets-install.md](../../docs/external-secrets-install.md) |
+| Object storage (images, backups) | Garage → use `AWS_*` env vars from synced K8s Secret (Phase 2+) | [docs/garage-install.md](../../docs/garage-install.md) |
+| Postgres database | CloudNativePG → declare a `Cluster` resource in the overlay (Phase 3) | [docs/cnpg-install.md](../../docs/cnpg-install.md) |
 
 ## Related
 

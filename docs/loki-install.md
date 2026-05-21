@@ -23,7 +23,7 @@ If a future workload needs traces or wants to push metrics from a non-Prometheus
 Loki supports either a filesystem PVC or an S3-compatible object store. We use Garage S3 because:
 
 - **Multi-node future.** The plan to add a second K3s node (GPU box) requires a storage backend that's reachable from any node. A `local-path` PVC binds Loki to one node forever. Migrating to S3 later means re-indexing every chunk.
-- **We already have Garage.** Same cluster-internal S3 endpoint used by the `images` and `postgres-backups` buckets — adding `loki` is one bucket-create command.
+- **We already have Garage.** Same cluster-internal S3 endpoint used by the `cove-media` and `postgres-backups` buckets — adding `loki` is one bucket-create command.
 - **Object storage is Loki's recommended backend.** Filesystem mode is for local dev and small homelabs that don't plan to grow; everything else uses S3.
 
 The trade-off: log queries now traverse a network hop to Garage. At single-node scale the latency is negligible (same node, Service DNS), but if log volume grows past ~1 TB/day, SimpleScalable mode + memcached front-cache become attractive.
@@ -60,7 +60,7 @@ The Grafana datasource is wired via a `grafana.additionalDataSources` block in `
 
 ## Step 1 — Create the Garage `loki` bucket and access key
 
-These are one-time Garage CLI operations, run inside the Garage pod. Same flow as the original `images` bucket bootstrap in [docs/garage-install.md](garage-install.md).
+These are one-time Garage CLI operations, run inside the Garage pod. Same flow as the original `cove-media` bucket bootstrap in [docs/garage-install.md](garage-install.md).
 
 ```bash
 kubectl -n garage exec garage-0 -- /garage bucket create loki
