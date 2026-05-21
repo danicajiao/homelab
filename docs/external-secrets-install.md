@@ -18,11 +18,12 @@ The rule is **consumer-owns**: a secret lives in the GCP project of the *workloa
 
 | Example secret | Consumer | Project | Store |
 |---|---|---|---|
-| `garage-images-access-key` (S3 key for the `images` bucket) | cove-image, CNPG `Cluster` resources for cove DBs | `cove-6a685` | `gcp-cove` |
+| `garage-cove-media-access-key` (S3 key for the `cove-media` bucket) | cove-image, CNPG `Cluster` resources for cove DBs | `cove-6a685` | `gcp-cove` |
 | `garage-postgres-backups-*-key` | CNPG cluster running cove's database | `cove-6a685` | `gcp-cove` |
+| `cove-api-firebase-service-account` (Firebase Admin SDK creds for cove-api) | `cove-api` in the `cove-staging` / `cove-prod` namespaces | `cove-6a685` | `gcp-cove` |
 | `minecraft-curseforge-api-key` | Minecraft server in the `gaming` namespace | `homelab-495921` | `gcp-homelab` |
-| Cloudflare Tunnel token (future) | `cloudflared` in the `cloudflare` namespace | `homelab-495921` | `gcp-homelab` |
-| Grafana admin password (future) | Grafana in the `monitoring` namespace | `homelab-495921` | `gcp-homelab` |
+| Cloudflare Tunnel token | `cloudflared` in the `cloudflare-tunnel` namespace | `homelab-495921` | `gcp-homelab` |
+| Grafana admin password | Grafana in the `monitoring` namespace | `homelab-495921` | `gcp-homelab` |
 
 The Garage access keys are an instructive case: Garage itself runs in the homelab cluster, but the keys are *consumed by cove apps* — so they belong in the cove project. A leaked cove SA exposes the buckets that cove uses; a leaked homelab SA exposes Minecraft's CF key. Blast radius stays scoped to a single product surface.
 

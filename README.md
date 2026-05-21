@@ -10,7 +10,7 @@ GitOps repository for a single-node K3s homelab cluster, managed by [Argo CD](ht
 
 | Track | What | Status | Details |
 |---|---|---|---|
-| `apps/cove/` | Cove iOS app's backend services | Phase 0 in progress (cluster bootstrap) | [apps/cove/README.md](apps/cove/README.md) |
+| `apps/cove/` | Cove iOS app's backend services | Phase 1 — `cove-api` gateway deployed | [apps/cove/README.md](apps/cove/README.md) |
 | `apps/gaming/minecraft/` | Minecraft Fabric server (Homestead modpack, port 25565) | Running | [apps/gaming/minecraft/README.md](apps/gaming/minecraft/README.md) |
 
 Plus the platform layer in `infra/` that everything else builds on (see "Operators" below).
@@ -22,8 +22,8 @@ Plus the platform layer in `infra/` that everything else builds on (see "Operato
 ```
 homelab/
 ├── apps/
-│   ├── cove/                    # Cove backend (Phase 1+ services land here)
-│   │   ├── base/
+│   ├── cove/                    # Cove backend (cove-api shipped in Phase 1)
+│   │   ├── base/                # cove-api manifests + gar-pull-secret
 │   │   └── overlays/{staging,prod}/
 │   └── gaming/minecraft/        # Homestead Fabric modpack
 ├── infra/
@@ -63,12 +63,11 @@ Each operator has a runbook covering install, day-2 operations, and any manual b
 | Argo CD | GitOps reconciler | [docs/argocd-install.md](docs/argocd-install.md) |
 | External Secrets Operator | Sync GCP Secret Manager → K8s Secrets | [docs/external-secrets-install.md](docs/external-secrets-install.md) |
 | CloudNativePG (CNPG) | Postgres `Cluster` CRDs (clusters provisioned in Phase 3) | [docs/cnpg-install.md](docs/cnpg-install.md) |
-| Garage | S3-compatible object storage (`images`, `postgres-backups`) | [docs/garage-install.md](docs/garage-install.md) |
+| Garage | S3-compatible object storage (`cove-media`, `postgres-backups`, `loki` buckets) | [docs/garage-install.md](docs/garage-install.md) |
 | kube-prometheus-stack | Prometheus + Grafana + Alertmanager + node-exporter + kube-state-metrics | [docs/kube-prometheus-stack-install.md](docs/kube-prometheus-stack-install.md) |
 | Loki | Log aggregation (Garage S3 backend, 14d retention) | [docs/loki-install.md](docs/loki-install.md) |
 | Grafana Alloy | Log collector DaemonSet (tails pod logs → Loki) | [docs/loki-install.md](docs/loki-install.md) |
-
-Pending Phase 0: Cloudflare Tunnel.
+| Cloudflare Tunnel | Exposes `api.coveapp.dev` → cluster without open ports | — |
 
 ---
 
