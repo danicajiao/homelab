@@ -1,0 +1,80 @@
+# imgproxy Deployment.
+#
+# Runs the OSS imgproxy image (free, MIT licensed). Resizes and re-encodes
+# images on the fly from the Garage `cove-media` S3 bucket. Clients never
+# call imgproxy directly — cove-api routes /i/* to this service, and
+# cove-product generates signed URLs that imgproxy verifies before serving.
+#
+# Signing keys (IMGPROXY_KEY / IMGPROXY_SALT) and Garage credentials are
+# injected via the ExternalSecret in external-secret.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: imgproxy
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: imgproxy
+    template:
+        metadata:
+            labels:
+                app: imgproxy
+        spec:
+            containers:
+                - name: imgproxy
+                  image: darthsim/imgproxy:v3
+                  ports:
+                      - containerPort: 8080
+                  env:
+                      # S3 source — reads originals from Garage `cove-media` bucket.
+                      - name: IMGPROXY_USE_S3
+                        value: "true"
+                      - name: IMGPROXY_S3_ENDPOINT
+                        value: "http://garage.garage.svc.cluster.local:3900"
+                      - name: IMGPROXY_S3_FORCE_PATH_STYLE
+                        value: "true"
+                      # URL signing — prevents untrusted clients from requesting
+                      # arbitrary transforms. Values injected by ExternalSecret.
+                      - name: IMGPROXY_KEY
+                        valueFrom:
+                            secretKeyRef:
+                                name: imgproxy-signing-keys
+                                key: IMGPROXY_KEY
+                      - name: IMGPROXY_SALT
+                        valueFrom:
+                            secretKeyRef:
+                                name: imgproxy-signing-keys
+                                key: IMGPROXY_SALT
+                      # Garage credentials for S3 reads.
+                      - name: AWS_ACCESS_KEY_ID
+                        valueFrom:
+                            secretKeyRef:
+                                name: imgproxy-garage-creds
+                                key: AWS_ACCESS_KEY_ID
+                      - name: AWS_SECRET_ACCESS_KEY
+                        valueFrom:
+                            secretKeyRef:
+                                name: imgproxy-garage-creds
+                                key: AWS_SECRET_ACCESS_KEY
+                  livenessProbe:
+                      httpGet:
+                          path: /health
+                          port: 8080
+                      initialDelaySeconds: 10
+                      periodSeconds: 15
+                      failureThreshold: 3
+                  readinessProbe:
+                      httpGet:
+                          path: /health
+                          port: 8080
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                      failureThreshold: 3
+                  resources:
+                      requests:
+                          cpu: 100m
+                          memory: 128Mi
+                      limits:
+                          cpu: 500m
+                          memory: 512Mi

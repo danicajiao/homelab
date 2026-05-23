@@ -6,3 +6,4 @@ kind: Kustomization
 resources:
     - gar-pull-secret.yaml
     - cove-api/
+    - imgproxy/
