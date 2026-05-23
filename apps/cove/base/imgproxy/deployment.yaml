@@ -34,6 +34,10 @@ spec:
                         value: "http://garage.garage.svc.cluster.local:3900"
                       - name: IMGPROXY_S3_FORCE_PATH_STYLE
                         value: "true"
+                      # Garage ignores the region value but the AWS SDK requires
+                      # a non-empty region to sign requests correctly.
+                      - name: IMGPROXY_S3_REGION
+                        value: "garage"
                       # URL signing — prevents untrusted clients from requesting
                       # arbitrary transforms. Values injected by ExternalSecret.
                       - name: IMGPROXY_KEY
