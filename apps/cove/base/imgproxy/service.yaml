@@ -1,0 +1,15 @@
+# imgproxy Service — ClusterIP only.
+#
+# cove-api routes /i/* to this service at imgproxy:8080 (within the same
+# namespace). Not exposed outside the cluster — clients hit
+# api.coveapp.dev/i/* and cove-api forwards to imgproxy internally.
+apiVersion: v1
+kind: Service
+metadata:
+    name: imgproxy
+spec:
+    selector:
+        app: imgproxy
+    ports:
+        - port: 8080
+          targetPort: 8080
