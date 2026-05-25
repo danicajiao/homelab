@@ -1,0 +1,16 @@
+# ClusterIP Service for cove-image.
+#
+# cove-image is not exposed publicly — cove-api routes upload and
+# image-URL requests to it in-cluster. The /i/* imgproxy proxy path
+# (#244) routes to imgproxy directly, not through cove-image.
+apiVersion: v1
+kind: Service
+metadata:
+    name: cove-image
+spec:
+    selector:
+        app: cove-image
+    ports:
+        - port: 8080
+          targetPort: 8080
+    type: ClusterIP

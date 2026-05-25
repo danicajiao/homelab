@@ -1,0 +1,96 @@
+# cove-image Deployment.
+#
+# Handles image uploads (multipart → Garage S3) and signs imgproxy URLs
+# for clients. Lightweight Go service — no heavy compute.
+#
+# Image tag is intentionally absent — overlays pin their own sha-* tag
+# via the Kustomize `images:` transformer so the base is env-agnostic.
+#
+# Secrets: cove-image reuses two secrets already managed by imgproxy's
+# ExternalSecrets (external-secret.yaml in the imgproxy/ directory):
+#   - imgproxy-signing-keys: IMGPROXY_KEY and IMGPROXY_SALT
+#   - imgproxy-garage-creds: Garage S3 credentials (stored under AWS_*
+#     key names; remapped to GARAGE_* env var names here)
+# No additional ExternalSecret is needed for cove-image.
+#
+# IMGPROXY_BASE_URL is the public URL prefix clients use to fetch images
+# (e.g. https://staging-api.coveapp.dev/i). cove-api forwards /i/* to
+# imgproxy (#244). The prod overlay patches this value to the prod URL.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: cove-image
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: cove-image
+    template:
+        metadata:
+            labels:
+                app: cove-image
+        spec:
+            imagePullSecrets:
+                - name: gar-pull-secret
+            containers:
+                - name: cove-image
+                  image: us-central1-docker.pkg.dev/cove-6a685/services/cove-image
+                  ports:
+                      - containerPort: 8080
+                  env:
+                      - name: PORT
+                        value: "8080"
+                      # Garage S3 — reads from and writes to the cove-media bucket.
+                      - name: GARAGE_ENDPOINT
+                        value: "http://garage.garage.svc.cluster.local:3900"
+                      - name: GARAGE_BUCKET
+                        value: "cove-media"
+                      - name: GARAGE_ACCESS_KEY_ID
+                        valueFrom:
+                            secretKeyRef:
+                                name: imgproxy-garage-creds
+                                key: AWS_ACCESS_KEY_ID
+                      - name: GARAGE_SECRET_ACCESS_KEY
+                        valueFrom:
+                            secretKeyRef:
+                                name: imgproxy-garage-creds
+                                key: AWS_SECRET_ACCESS_KEY
+                      # imgproxy URL signing — used by GET /images/{filename}/url
+                      # to generate signed URLs clients follow to fetch resized images.
+                      - name: IMGPROXY_KEY
+                        valueFrom:
+                            secretKeyRef:
+                                name: imgproxy-signing-keys
+                                key: IMGPROXY_KEY
+                      - name: IMGPROXY_SALT
+                        valueFrom:
+                            secretKeyRef:
+                                name: imgproxy-signing-keys
+                                key: IMGPROXY_SALT
+                      # Public-facing imgproxy URL prefix. Clients follow URLs of the
+                      # form <IMGPROXY_BASE_URL>/<sig>/.... Requires cove-api to proxy
+                      # /i/* to imgproxy (danicajiao/cove#244).
+                      # Prod overlay patches this to https://api.coveapp.dev/i.
+                      - name: IMGPROXY_BASE_URL
+                        value: "https://staging-api.coveapp.dev/i"
+                  livenessProbe:
+                      httpGet:
+                          path: /health
+                          port: 8080
+                      initialDelaySeconds: 10
+                      periodSeconds: 15
+                      failureThreshold: 3
+                  readinessProbe:
+                      httpGet:
+                          path: /health
+                          port: 8080
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                      failureThreshold: 3
+                  resources:
+                      requests:
+                          cpu: 50m
+                          memory: 64Mi
+                      limits:
+                          cpu: 200m
+                          memory: 256Mi
