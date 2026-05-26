@@ -16,6 +16,6 @@ resources:
 # Update this tag each time a new build is promoted to staging.
 images:
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-api
-      newTag: sha-3afa95688c148c92281520d93f178e13a07f12c6
+      newTag: sha-448d6d295133e9ca56ad074ac153f4ed87489edd
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-image
-      newTag: sha-3afa95688c148c92281520d93f178e13a07f12c6
+      newTag: sha-448d6d295133e9ca56ad074ac153f4ed87489edd
