@@ -33,9 +33,9 @@ spec:
             # to Garage, then selectively replaces config/ mods/ kubejs/ scripts/
             # per the Homestead server update guide. The world is never touched.
             - name: MODPACK_VERSION
-              value: "1.3.7"
+              value: "1.3.4"
             - name: GDRIVE_FILE_ID
-              value: "1T0h9jJP6hsIALqS_4u511A7Ju47GRYJV"
+              value: "1D5ZdK4h2lTj4jDkIIBIWR1Rh6A8_QC8r"
             - name: S3_ENDPOINT
               value: "http://garage.garage.svc.cluster.local:3900"
             - name: S3_BUCKET
