@@ -104,7 +104,7 @@ spec:
               fi
 
               apk add --no-cache python3 py3-pip unzip
-              pip install gdown --quiet
+              pip install gdown --quiet --break-system-packages
 
               echo "Downloading modpack $MODPACK_VERSION from Google Drive..."
               gdown "https://drive.google.com/uc?id=${GDRIVE_FILE_ID}" -O /tmp/modpack.zip
