@@ -25,17 +25,18 @@ spec:
         app: minecraft
     spec:
       initContainers:
-        - name: modpack-installer
-          image: alpine:latest
+        # Split into two containers so each has its own /tmp — combining
+        # aws-cli (apk, pulls Python) with the zip extraction exhausted /tmp
+        # space and caused unzip to produce no output directory, making the
+        # subsequent cp silently target / instead of the modpack directory.
+
+        - name: world-backup
+          # amazon/aws-cli ships with aws-cli pre-installed — no apk needed,
+          # so this container's /tmp is free for the world tar.
+          image: amazon/aws-cli:latest
           env:
-            # To upgrade the modpack: update both values and open a PR.
-            # The init container detects the version change, backs up /data/world
-            # to Garage, then selectively replaces config/ mods/ kubejs/ scripts/
-            # per the Homestead server update guide. The world is never touched.
             - name: MODPACK_VERSION
               value: "1.3.4"
-            - name: GDRIVE_FILE_ID
-              value: "1D5ZdK4h2lTj4jDkIIBIWR1Rh6A8_QC8r"
             - name: S3_ENDPOINT
               value: "http://garage.garage.svc.cluster.local:3900"
             - name: S3_BUCKET
@@ -55,14 +56,10 @@ spec:
               fi
 
               if [ "$INSTALLED_VERSION" = "$MODPACK_VERSION" ]; then
-                echo "Modpack $MODPACK_VERSION already installed, skipping."
+                echo "Modpack $MODPACK_VERSION already installed, skipping backup."
                 exit 0
               fi
 
-              apk add --no-cache curl aws-cli unzip
-
-              # Back up the world before touching anything, but only on updates
-              # (not fresh installs — there's no world data yet).
               if [ -n "$INSTALLED_VERSION" ] && [ -d /data/world ]; then
                 echo "Backing up world before update $INSTALLED_VERSION -> $MODPACK_VERSION..."
                 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
@@ -72,7 +69,41 @@ spec:
                   /tmp/world-backup.tar.gz "s3://$S3_BUCKET/$BACKUP_KEY"
                 rm /tmp/world-backup.tar.gz
                 echo "World backed up to s3://$S3_BUCKET/$BACKUP_KEY"
+              else
+                echo "Fresh install — no world to back up."
               fi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+
+        - name: modpack-installer
+          # Plain alpine with only curl + unzip — /tmp is not shared with the
+          # backup container so the full space is available for extraction.
+          image: alpine:latest
+          env:
+            # To upgrade the modpack: update both MODPACK_VERSION and
+            # GDRIVE_FILE_ID here and in world-backup above, then open a PR.
+            - name: MODPACK_VERSION
+              value: "1.3.4"
+            - name: GDRIVE_FILE_ID
+              value: "1D5ZdK4h2lTj4jDkIIBIWR1Rh6A8_QC8r"
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+
+              INSTALLED_VERSION=""
+              if [ -f /data/.modpack-version ]; then
+                INSTALLED_VERSION=$(cat /data/.modpack-version)
+              fi
+
+              if [ "$INSTALLED_VERSION" = "$MODPACK_VERSION" ]; then
+                echo "Modpack $MODPACK_VERSION already installed, skipping."
+                exit 0
+              fi
+
+              apk add --no-cache curl unzip
 
               echo "Downloading modpack $MODPACK_VERSION from Google Drive..."
               curl -fL \
@@ -81,7 +112,15 @@ spec:
 
               mkdir -p /tmp/modpack
               unzip -q /tmp/modpack.zip -d /tmp/modpack
+
+              # Detect the top-level directory the zip extracted into.
               EXTRACTED_DIR=$(find /tmp/modpack -maxdepth 1 -mindepth 1 -type d | head -1)
+              if [ -z "$EXTRACTED_DIR" ]; then
+                echo "ERROR: unzip produced no directory in /tmp/modpack — extraction likely failed."
+                ls -la /tmp/modpack
+                exit 1
+              fi
+              echo "Extracted to: $EXTRACTED_DIR"
 
               if [ -z "$INSTALLED_VERSION" ]; then
                 echo "Fresh install of $MODPACK_VERSION..."
