@@ -25,67 +25,14 @@ spec:
         app: minecraft
     spec:
       initContainers:
-        # Split into two containers so each has its own /tmp — combining
-        # aws-cli (apk, pulls Python) with the zip extraction exhausted /tmp
-        # space and caused unzip to produce no output directory, making the
-        # subsequent cp silently target / instead of the modpack directory.
-
-        - name: world-backup
-          # amazon/aws-cli ships with aws-cli pre-installed — no apk needed,
-          # so this container's /tmp is free for the world tar.
-          image: amazon/aws-cli:latest
-          env:
-            - name: MODPACK_VERSION
-              value: "1.3.4"
-            - name: S3_ENDPOINT
-              value: "http://garage.garage.svc.cluster.local:3900"
-            - name: S3_BUCKET
-              value: "minecraft-backups"
-            - name: AWS_DEFAULT_REGION
-              value: "garage"
-          envFrom:
-            - secretRef:
-                name: minecraft-backups-creds
-          command:
-            - sh
-            - -c
-            - |
-              INSTALLED_VERSION=""
-              if [ -f /data/.modpack-version ]; then
-                INSTALLED_VERSION=$(cat /data/.modpack-version)
-              fi
-
-              if [ "$INSTALLED_VERSION" = "$MODPACK_VERSION" ]; then
-                echo "Modpack $MODPACK_VERSION already installed, skipping backup."
-                exit 0
-              fi
-
-              if [ -n "$INSTALLED_VERSION" ] && [ -d /data/world ]; then
-                echo "Backing up world before update $INSTALLED_VERSION -> $MODPACK_VERSION..."
-                TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-                BACKUP_KEY="world-pre-update-${INSTALLED_VERSION}-to-${MODPACK_VERSION}-${TIMESTAMP}.tar.gz"
-                tar -czf /tmp/world-backup.tar.gz -C /data world
-                aws --endpoint-url "$S3_ENDPOINT" s3 cp \
-                  /tmp/world-backup.tar.gz "s3://$S3_BUCKET/$BACKUP_KEY"
-                rm /tmp/world-backup.tar.gz
-                echo "World backed up to s3://$S3_BUCKET/$BACKUP_KEY"
-              else
-                echo "Fresh install — no world to back up."
-              fi
-          volumeMounts:
-            - name: data
-              mountPath: /data
-
         - name: modpack-installer
-          # Uses amazon/aws-cli (consistent with world-backup) so unzip can
-          # be installed via yum without consuming /tmp space via apk+Python.
           image: amazon/aws-cli:latest
           env:
             # To upgrade the modpack:
-            #   1. Upload the new zip to Garage:
-            #        aws --endpoint-url http://garage.garage.svc.cluster.local:3900 s3 cp \
+            #   1. Upload the new zip to Garage (port-forward if running locally):
+            #        aws --endpoint-url http://localhost:3900 s3 cp \
             #          <zip> s3://minecraft-backups/modpacks/Homestead<VERSION>_server_pack.zip
-            #   2. Update MODPACK_VERSION here and in world-backup above, then open a PR.
+            #   2. Update MODPACK_VERSION below and open a PR.
             - name: MODPACK_VERSION
               value: "1.3.4"
             - name: S3_ENDPOINT
@@ -111,6 +58,21 @@ spec:
               if [ "$INSTALLED_VERSION" = "$MODPACK_VERSION" ]; then
                 echo "Modpack $MODPACK_VERSION already installed, skipping."
                 exit 0
+              fi
+
+              # Back up the world before touching anything, but only on updates
+              # (not fresh installs — there's no world data yet).
+              if [ -n "$INSTALLED_VERSION" ] && [ -d /data/world ]; then
+                echo "Backing up world before update $INSTALLED_VERSION -> $MODPACK_VERSION..."
+                TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+                BACKUP_KEY="world-pre-update-${INSTALLED_VERSION}-to-${MODPACK_VERSION}-${TIMESTAMP}.tar.gz"
+                tar -czf /tmp/world-backup.tar.gz -C /data world
+                aws --endpoint-url "$S3_ENDPOINT" s3 cp \
+                  /tmp/world-backup.tar.gz "s3://$S3_BUCKET/$BACKUP_KEY"
+                rm /tmp/world-backup.tar.gz
+                echo "World backed up to s3://$S3_BUCKET/$BACKUP_KEY"
+              else
+                echo "Fresh install — no world to back up."
               fi
 
               yum install -y unzip -q
