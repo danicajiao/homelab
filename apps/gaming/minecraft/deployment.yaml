@@ -151,7 +151,7 @@ spec:
             - name: SIMULATION_DISTANCE
               value: "6"
             - name: VIEW_DISTANCE
-              value: "10"
+              value: "6"
           ports:
             - containerPort: 25565
               protocol: TCP
