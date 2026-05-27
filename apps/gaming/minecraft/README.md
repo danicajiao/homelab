@@ -27,6 +27,48 @@ kubectl get pods -n gaming -l app=minecraft
 > [!IMPORTANT]
 > A `ValidatingAdmissionPolicy` ([`replica-cap.yaml`](replica-cap.yaml)) enforces a **hard cap of 1 replica**. Attempting `--replicas=2` (or higher) is rejected at the API server — Minecraft world data is single-writer and concurrent pods on the same PVC would corrupt the world. To run more than one server, create a separate Deployment + PVC.
 
+## Updating the modpack
+
+To upgrade to a new Homestead version:
+
+1. Get the new server pack's Google Drive file ID from the share link (`https://drive.google.com/file/d/<FILE_ID>/view`).
+2. Edit [`deployment.yaml`](deployment.yaml) — update both `MODPACK_VERSION` and `GDRIVE_FILE_ID` under the `modpack-installer` init container env.
+3. Open a PR. On the next pod start after merge, the init container detects the version mismatch and:
+   - **Backs up `/data/world` to Garage** (`minecraft-backups` bucket, key `world-pre-update-<old>-to-<new>-<timestamp>.tar.gz`) before touching anything
+   - Deletes `config/`, `mods/`, `kubejs/`, `scripts/` from the data volume
+   - Downloads the new pack from Google Drive and copies those four folders in
+   - Writes the new version to `/data/.modpack-version`
+   - Leaves `world/` and everything else untouched
+
+No manual SSH or file copying to the host node required.
+
+> [!NOTE]
+> The modpack zip is downloaded at pod-start time from Google Drive. The init container is skipped entirely if the installed version already matches `MODPACK_VERSION`, so normal restarts are fast.
+
+## World backups
+
+Before every modpack update the init container backs up `/data/world` to the `minecraft-backups` bucket in Garage (`world-pre-update-<old>-to-<new>-<timestamp>.tar.gz`).
+
+Credentials come from the `minecraft-backups-creds` Secret materialized by [`external-secret-backups.yaml`](external-secret-backups.yaml). See that file's header comment for the one-time Garage bucket bootstrap steps.
+
+To restore a backup:
+
+```bash
+# List available backups
+kubectl -n garage exec garage-0 -- /garage bucket ls minecraft-backups
+
+# Download a specific backup to your local machine
+aws --endpoint-url http://<node-ip>:3900 s3 cp \
+  s3://minecraft-backups/<backup-key> ./world-restore.tar.gz
+
+# Extract (replace the running server's world folder)
+kubectl scale deployment minecraft -n gaming --replicas=0
+kubectl run restore --rm -i --restart=Never --image=alpine \
+  --overrides='{"spec":{"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"minecraft-data"}}],"containers":[{"name":"restore","image":"alpine","command":["sh"],"stdin":true,"tty":true,"volumeMounts":[{"name":"data","mountPath":"/data"}]}]}}'
+# Inside the pod: rm -rf /data/world && tar -xzf /restore/world-restore.tar.gz -C /data
+kubectl scale deployment minecraft -n gaming --replicas=1
+```
+
 ## Secret management
 
 ### CurseForge API key

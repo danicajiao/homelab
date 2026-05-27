@@ -17,4 +17,5 @@ resources:
     - pvc.yaml
     - service.yaml
     - external-secret.yaml
+    - external-secret-backups.yaml
     - replica-cap.yaml

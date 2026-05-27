@@ -27,29 +27,85 @@ spec:
       initContainers:
         - name: modpack-installer
           image: alpine:latest
+          env:
+            # To upgrade the modpack: update both values and open a PR.
+            # The init container detects the version change, backs up /data/world
+            # to Garage, then selectively replaces config/ mods/ kubejs/ scripts/
+            # per the Homestead server update guide. The world is never touched.
+            - name: MODPACK_VERSION
+              value: "1.3.7"
+            - name: GDRIVE_FILE_ID
+              value: "1T0h9jJP6hsIALqS_4u511A7Ju47GRYJV"
+            - name: S3_ENDPOINT
+              value: "http://garage.garage.svc.cluster.local:3900"
+            - name: S3_BUCKET
+              value: "minecraft-backups"
+            - name: AWS_DEFAULT_REGION
+              value: "garage"
+          envFrom:
+            - secretRef:
+                name: minecraft-backups-creds
           command:
             - sh
             - -c
             - |
-              if [ ! -f /data/.modpack-installed ]; then
-                echo "Extracting server pack..."
-                apk add --no-cache unzip
-                unzip -o /modpack/Homestead1.3.4_server_pack.zip -d /tmp/modpack
-                cp -r /tmp/modpack/Homestead1.3.4/. /data/
-                rm -rf /tmp/modpack
-                chown -R 1000:1000 /data
-                chmod -R u+w /data
-                touch /data/.modpack-installed
-                echo "Done."
-              else
-                echo "Server pack already installed, skipping."
+              INSTALLED_VERSION=""
+              if [ -f /data/.modpack-version ]; then
+                INSTALLED_VERSION=$(cat /data/.modpack-version)
               fi
+
+              if [ "$INSTALLED_VERSION" = "$MODPACK_VERSION" ]; then
+                echo "Modpack $MODPACK_VERSION already installed, skipping."
+                exit 0
+              fi
+
+              apk add --no-cache curl aws-cli unzip
+
+              # Back up the world before touching anything, but only on updates
+              # (not fresh installs — there's no world data yet).
+              if [ -n "$INSTALLED_VERSION" ] && [ -d /data/world ]; then
+                echo "Backing up world before update $INSTALLED_VERSION -> $MODPACK_VERSION..."
+                TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+                BACKUP_KEY="world-pre-update-${INSTALLED_VERSION}-to-${MODPACK_VERSION}-${TIMESTAMP}.tar.gz"
+                tar -czf /tmp/world-backup.tar.gz -C /data world
+                aws --endpoint-url "$S3_ENDPOINT" s3 cp \
+                  /tmp/world-backup.tar.gz "s3://$S3_BUCKET/$BACKUP_KEY"
+                rm /tmp/world-backup.tar.gz
+                echo "World backed up to s3://$S3_BUCKET/$BACKUP_KEY"
+              fi
+
+              echo "Downloading modpack $MODPACK_VERSION from Google Drive..."
+              curl -fL \
+                "https://drive.usercontent.google.com/download?id=${GDRIVE_FILE_ID}&export=download&confirm=t" \
+                -o /tmp/modpack.zip
+
+              mkdir -p /tmp/modpack
+              unzip -q /tmp/modpack.zip -d /tmp/modpack
+              EXTRACTED_DIR=$(find /tmp/modpack -maxdepth 1 -mindepth 1 -type d | head -1)
+
+              if [ -z "$INSTALLED_VERSION" ]; then
+                echo "Fresh install of $MODPACK_VERSION..."
+                cp -r "$EXTRACTED_DIR/." /data/
+              else
+                # Selective update per https://cozystudios.org/homestead/how-to-update-server/
+                # Only replace these four folders; world/ and all other data are untouched.
+                echo "Updating $INSTALLED_VERSION -> $MODPACK_VERSION..."
+                for folder in config mods kubejs scripts; do
+                  rm -rf "/data/$folder"
+                  if [ -d "$EXTRACTED_DIR/$folder" ]; then
+                    cp -r "$EXTRACTED_DIR/$folder" /data/
+                  fi
+                done
+              fi
+
+              rm -rf /tmp/modpack /tmp/modpack.zip
+              chown -R 1000:1000 /data
+              chmod -R u+w /data
+              echo -n "$MODPACK_VERSION" > /data/.modpack-version
+              echo "Modpack $MODPACK_VERSION installed successfully."
           volumeMounts:
             - name: data
               mountPath: /data
-            - name: modpack
-              mountPath: /modpack
-              readOnly: true
 
       containers:
         - name: minecraft
@@ -102,9 +158,6 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
-            - name: modpack
-              mountPath: /modpack
-              readOnly: true
           resources:
             requests:
               memory: 12Gi
@@ -117,7 +170,3 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: minecraft-data
-        - name: modpack
-          hostPath:
-            path: /opt/minecraft
-            type: Directory
