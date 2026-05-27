@@ -103,12 +103,11 @@ spec:
                 exit 0
               fi
 
-              apk add --no-cache curl unzip
+              apk add --no-cache python3 py3-pip unzip
+              pip install gdown --quiet
 
               echo "Downloading modpack $MODPACK_VERSION from Google Drive..."
-              curl -fL \
-                "https://drive.usercontent.google.com/download?id=${GDRIVE_FILE_ID}&export=download&confirm=t" \
-                -o /tmp/modpack.zip
+              gdown "https://drive.google.com/uc?id=${GDRIVE_FILE_ID}" -O /tmp/modpack.zip
 
               mkdir -p /tmp/modpack
               unzip -q /tmp/modpack.zip -d /tmp/modpack
