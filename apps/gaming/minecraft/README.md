@@ -29,10 +29,15 @@ kubectl get pods -n gaming -l app=minecraft
 
 ## Updating the modpack
 
-To upgrade to a new Homestead version:
+Modpack zips are stored in Garage at `s3://minecraft-backups/modpacks/`. To upgrade to a new Homestead version:
 
-1. Get the new server pack's Google Drive file ID from the share link (`https://drive.google.com/file/d/<FILE_ID>/view`).
-2. Edit [`deployment.yaml`](deployment.yaml) — update both `MODPACK_VERSION` and `GDRIVE_FILE_ID` under the `modpack-installer` init container env.
+1. Download the new server pack zip and upload it to Garage (port-forward first if running locally):
+   ```bash
+   kubectl -n garage port-forward svc/garage 3900:3900 &
+   aws --endpoint-url http://localhost:3900 s3 cp \
+     <zip> s3://minecraft-backups/modpacks/Homestead<VERSION>_server_pack.zip
+   ```
+2. Edit [`deployment.yaml`](deployment.yaml) — update `MODPACK_VERSION` in both the `world-backup` and `modpack-installer` init containers.
 3. Open a PR. On the next pod start after merge, the init container detects the version mismatch and:
    - **Backs up `/data/world` to Garage** (`minecraft-backups` bucket, key `world-pre-update-<old>-to-<new>-<timestamp>.tar.gz`) before touching anything
    - Deletes `config/`, `mods/`, `kubejs/`, `scripts/` from the data volume
