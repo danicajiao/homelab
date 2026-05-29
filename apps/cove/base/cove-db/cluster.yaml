@@ -44,6 +44,8 @@ spec:
                 - CREATE EXTENSION IF NOT EXISTS ltree;
                 - DO $$ BEGIN CREATE ROLE cove_item WITH LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
                 - DO $$ BEGIN CREATE ROLE cove_user WITH LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+                - ALTER ROLE cove_item SET search_path = catalog, directory, public;
+                - ALTER ROLE cove_user  SET search_path = profile, public;
 
     # Wire in the Barman Cloud Plugin. isWALArchiver enables continuous WAL
     # archiving (point-in-time recovery); base backups are taken by the
