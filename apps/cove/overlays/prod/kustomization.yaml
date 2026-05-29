@@ -37,16 +37,13 @@ patches:
       target:
           kind: Deployment
           name: cove-image
-    # Per-env backup serverName so staging/prod don't collide under the one
-    # `postgres-backups` Garage bucket (backups live at <destinationPath>/<serverName>/).
-    - patch: |-
-          apiVersion: barmancloud.cnpg.io/v1
-          kind: ObjectStore
-          metadata:
-              name: cove-db-backup
-          spec:
-              configuration:
-                  serverName: cove-db-prod
-      target:
-          kind: ObjectStore
-          name: cove-db-backup
+    # Per-env backup serverName (a Barman Cloud Plugin parameter on the Cluster)
+    # so staging/prod don't collide under the one `postgres-backups` Garage
+    # bucket (backups live at <destinationPath>/<serverName>/).
+    - target:
+          kind: Cluster
+          name: cove-db
+      patch: |-
+          - op: replace
+            path: /spec/plugins/0/parameters/serverName
+            value: cove-db-prod

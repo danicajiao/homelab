@@ -1,14 +1,14 @@
 # Barman Cloud Plugin ObjectStore — where cove-db's backups + WAL land.
 #
 # Targets the Garage `postgres-backups` bucket over the in-cluster S3 endpoint.
-# `serverName` is overridden per environment in the overlays
-# (cove-db-staging / cove-db-prod) so the staging and prod clusters don't
-# collide under the one bucket — backups are stored under
+# The per-cluster backup identity (`serverName`) is NOT set here — the plugin
+# forbids it on the ObjectStore and requires it as a plugin parameter on the
+# Cluster instead (so one ObjectStore can serve multiple clusters). It's set
+# per env in the overlays (cove-db-staging / cove-db-prod); backups land under
 # `<destinationPath>/<serverName>/`.
 #
 # Credentials come from the `cove-db-backup-creds` Secret, synced by ESO from
-# GCP Secret Manager (see external-secret.yaml). Until those GCP secrets exist,
-# backups won't run — the cluster itself is unaffected.
+# GCP Secret Manager (see external-secret.yaml).
 apiVersion: barmancloud.cnpg.io/v1
 kind: ObjectStore
 metadata:
@@ -21,8 +21,6 @@ spec:
     configuration:
         destinationPath: s3://postgres-backups
         endpointURL: http://garage.garage.svc.cluster.local:3900
-        # Overridden per env in the overlays.
-        serverName: cove-db
         s3Credentials:
             accessKeyId:
                 name: cove-db-backup-creds
