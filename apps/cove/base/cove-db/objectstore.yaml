@@ -28,16 +28,16 @@ spec:
             secretAccessKey:
                 name: cove-db-backup-creds
                 key: ACCESS_SECRET_KEY
+            # Garage validates the SigV4 region scope: the signature must use
+            # region `garage`, not boto3's default of `us-east-1` (which Garage
+            # rejects with "Authorization header malformed, unexpected scope").
+            # barman-cloud explicitly sets boto3's region from this field, so an
+            # AWS_REGION env var alone is ignored — it must be set here. The
+            # value comes from the creds secret (injected via the ESO template).
+            region:
+                name: cove-db-backup-creds
+                key: region
         wal:
             compression: gzip
         data:
             compression: gzip
-
-    # Garage requires a non-empty AWS region for SigV4 request signing — the
-    # value itself is ignored by Garage, but without it barman-cloud's S3 calls
-    # fail with HTTP 400 on HeadBucket. Same reason imgproxy sets region=garage.
-    # barman-cloud uses boto3, which reads AWS_REGION from the sidecar env.
-    instanceSidecarConfiguration:
-        env:
-            - name: AWS_REGION
-              value: garage
