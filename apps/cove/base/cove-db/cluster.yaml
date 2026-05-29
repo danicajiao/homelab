@@ -28,10 +28,13 @@ spec:
     storage:
         size: 10Gi
 
-    # Create the `cove` database and enable the extensions the trust-layer
-    # schema needs (docs/MARKETPLACE_ARCHITECTURE.md §Setup). postInitApplicationSQL
-    # runs as superuser against the application database during bootstrap, so
-    # the superuser-only `CREATE EXTENSION postgis` succeeds.
+    # Create the `cove` database, extensions, and service roles during bootstrap.
+    # postInitApplicationSQL runs as superuser — the only place CREATE ROLE and
+    # CREATE EXTENSION are permitted. Schemas, tables, and grants are managed by
+    # golang-migrate migrations in danicajiao/cove (services/cove-item/migrations,
+    # services/cove-user/migrations) and run by the app user after bootstrap.
+    # NOTE: postInitApplicationSQL only runs at cluster creation time, not on
+    # updates. Changes here only take effect on a fresh cluster.
     bootstrap:
         initdb:
             database: cove
@@ -39,6 +42,8 @@ spec:
             postInitApplicationSQL:
                 - CREATE EXTENSION IF NOT EXISTS postgis;
                 - CREATE EXTENSION IF NOT EXISTS ltree;
+                - DO $$ BEGIN CREATE ROLE cove_item WITH LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+                - DO $$ BEGIN CREATE ROLE cove_user WITH LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
     # Wire in the Barman Cloud Plugin. isWALArchiver enables continuous WAL
     # archiving (point-in-time recovery); base backups are taken by the
