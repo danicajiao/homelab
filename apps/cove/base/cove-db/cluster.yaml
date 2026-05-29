@@ -1,0 +1,54 @@
+# CloudNativePG Postgres cluster for Cove (Phase 3).
+#
+# Uses the CNPG-maintained PostGIS image so `CREATE EXTENSION postgis`
+# succeeds; `ltree` ships with core Postgres. Both extensions are created at
+# bootstrap via postInitApplicationSQL. Schemas, service roles, and tables are
+# NOT created here — those are golang-migrate migrations in danicajiao/cove#318.
+#
+# Backups go through the Barman Cloud Plugin (danicajiao/cove#344), not the
+# deprecated in-tree barmanObjectStore: WAL is archived continuously
+# (isWALArchiver) and base backups are taken on a schedule (see
+# scheduledbackup.yaml). The plugin reads the ObjectStore named below
+# (objectstore.yaml) for its Garage S3 config.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+    name: cove-db
+    annotations:
+        # Protect the database from accidental pruning. The cove-staging /
+        # cove-prod Argo CD Applications run with `prune: true`; without this,
+        # removing the manifest (or a bad render) could delete the Cluster and
+        # its data. Argo will never auto-prune this resource.
+        argocd.argoproj.io/sync-options: Prune=false
+spec:
+    # Single node K3s — one instance (multi-instance gives no real HA here).
+    instances: 1
+    imageName: ghcr.io/cloudnative-pg/postgis:17-3.5
+
+    storage:
+        size: 10Gi
+
+    # Create the `cove` database and enable the extensions the trust-layer
+    # schema needs (docs/MARKETPLACE_ARCHITECTURE.md §Setup). postInitApplicationSQL
+    # runs as superuser against the application database during bootstrap, so
+    # the superuser-only `CREATE EXTENSION postgis` succeeds.
+    bootstrap:
+        initdb:
+            database: cove
+            owner: app
+            postInitApplicationSQL:
+                - CREATE EXTENSION IF NOT EXISTS postgis;
+                - CREATE EXTENSION IF NOT EXISTS ltree;
+
+    # Wire in the Barman Cloud Plugin. isWALArchiver enables continuous WAL
+    # archiving (point-in-time recovery); base backups are taken by the
+    # ScheduledBackup. barmanObjectName points at the ObjectStore CR.
+    plugins:
+        - name: barman-cloud.cloudnative-pg.io
+          isWALArchiver: true
+          parameters:
+              barmanObjectName: cove-db-backup
+
+    # Expose metrics to kube-prometheus-stack (installed cluster-wide).
+    monitoring:
+        enablePodMonitor: true
