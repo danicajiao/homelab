@@ -9,6 +9,7 @@ resources:
     - external-secrets.yaml
     - cert-manager.yaml
     - cnpg.yaml
+    - cnpg-barman-plugin.yaml
     - garage.yaml
     - kube-prometheus-stack.yaml
     - loki.yaml

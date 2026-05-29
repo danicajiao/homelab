@@ -1,0 +1,59 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: cnpg-barman-plugin
+    namespace: argocd
+    annotations:
+        # Wave 1 — installs after the wave-0 operators it depends on:
+        #   - cnpg (the CNPG operator this plugin extends)
+        #   - cert-manager (issues the mTLS certs for operator-plugin CNPG-I gRPC)
+        # The app-of-apps root waits for the wave-0 Applications to be Healthy
+        # (operator + webhook up, CRDs registered) before syncing this one, so
+        # the plugin's Certificate/Issuer resources reconcile cleanly.
+        argocd.argoproj.io/sync-wave: "1"
+    finalizers:
+        - resources-finalizer.argocd.argoproj.io
+spec:
+    project: default
+    # Single-source Application: the upstream Barman Cloud Plugin Helm chart at
+    # a pinned version. Chart `0.6.0` ships appVersion `v0.12.0`, so the plugin
+    # and the sidecar it injects into Postgres pods both resolve to v0.12.0
+    # (image/sidecarImage tags default to appVersion).
+    #
+    # The chart is self-sufficient given cert-manager: it creates a self-signed
+    # Issuer, the client/server Certificates, the `objectstores.barmancloud.cnpg.io`
+    # CRD, RBAC, the Deployment, and the `barman-cloud` Service (annotated so the
+    # CNPG operator discovers the plugin). No ObjectStore or Cluster changes here
+    # — the `cove-db` Cluster consumes the plugin in danicajiao/cove#320.
+    #
+    # Bumping the chart: edit `targetRevision` below, verify the rendered output,
+    # open a PR. Latest releases:
+    # https://github.com/cloudnative-pg/charts/releases (plugin-barman-cloud-*)
+    source:
+        repoURL: https://cloudnative-pg.github.io/charts
+        chart: plugin-barman-cloud
+        targetRevision: 0.6.0
+        helm:
+            releaseName: barman-cloud
+            parameters:
+                # Chart installs the CRD by default; set explicitly so Argo CD
+                # owns it (mirrors cert-manager / cnpg / external-secrets).
+                - name: crds.create
+                  value: "true"
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: cnpg-system
+    # Mirror the other operators: auto-heal drift, never auto-prune. Losing the
+    # `objectstores` CRD via prune would orphan every backup configuration.
+    # Manual prune is `argocd app sync cnpg-barman-plugin --prune`.
+    #
+    # No `ignoreDifferences` here. If the plugin's certs or CRD read back as
+    # drift post-install, add a scoped rule then (as external-secrets does for
+    # its webhook) — don't add it speculatively.
+    syncPolicy:
+        automated:
+            prune: false
+            selfHeal: true
+        syncOptions:
+            - ServerSideApply=true
+            - CreateNamespace=true
