@@ -1,0 +1,70 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: cert-manager
+    namespace: argocd
+    annotations:
+        # Foundational operator — installs in wave 0 alongside the other
+        # platform operators (external-secrets, cnpg, ...). cert-manager has
+        # no companion config Application yet; it's a dependency of the
+        # CloudNativePG Barman Cloud Plugin (danicajiao/cove#344), which needs
+        # cert-manager to issue the mTLS certs for operator-plugin (CNPG-I)
+        # communication.
+        argocd.argoproj.io/sync-wave: "0"
+    finalizers:
+        - resources-finalizer.argocd.argoproj.io
+spec:
+    project: default
+    # Single-source Application: just the upstream cert-manager Helm chart at a
+    # pinned version (operator + CRDs). No `Issuer`/`ClusterIssuer` resources are
+    # created here — the Barman Cloud Plugin ships its own self-signed Issuer.
+    # When a shared ClusterIssuer is eventually needed, this grows a second
+    # source pointing at `infra/cert-manager/` (mirroring the ESO layout).
+    #
+    # Bumping the chart: edit `targetRevision` below, verify the rendered
+    # output, open a PR. Latest releases:
+    # https://github.com/cert-manager/cert-manager/releases
+    source:
+        repoURL: https://charts.jetstack.io
+        chart: cert-manager
+        targetRevision: v1.20.2
+        helm:
+            releaseName: cert-manager
+            parameters:
+                # Have the chart install + keep the CRDs so Argo CD owns them.
+                # `crds.keep: true` is the chart default (CRDs survive an
+                # uninstall) but we set it explicitly for clarity. Mirrors how
+                # external-secrets / cnpg own their CRDs.
+                - name: crds.enabled
+                  value: "true"
+                - name: crds.keep
+                  value: "true"
+                # Have the chart create a ServiceMonitor for cert-manager's
+                # /metrics endpoint, picked up by kube-prometheus-stack (#214).
+                # Off by default in the chart. The `release: kube-prometheus-stack`
+                # label below makes the default serviceMonitorSelector match.
+                - name: prometheus.servicemonitor.enabled
+                  value: "true"
+                - name: prometheus.servicemonitor.labels.release
+                  value: kube-prometheus-stack
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: cert-manager
+    # Mirror argocd-self / external-secrets / cnpg: auto-heal drift, never
+    # auto-prune. Losing a cert-manager CRD via prune would orphan every
+    # Certificate/Issuer in the cluster. Manual prune is
+    # `argocd app sync cert-manager --prune`.
+    #
+    # No `ignoreDifferences` here. cert-manager's cainjector populates a
+    # `caBundle` on the CRD conversion webhook, which can read back as drift; if
+    # that surfaces post-install, add an ignoreDifferences rule for
+    # CustomResourceDefinition .spec.conversion.webhook.clientConfig.caBundle
+    # plus RespectIgnoreDifferences=true (as external-secrets does for its
+    # webhook) — don't add it speculatively.
+    syncPolicy:
+        automated:
+            prune: false
+            selfHeal: true
+        syncOptions:
+            - ServerSideApply=true
+            - CreateNamespace=true
