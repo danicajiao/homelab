@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# cove-db: CNPG Postgres cluster (PostGIS + ltree) with Barman Cloud Plugin
+# backups to Garage. Overlays set the per-env backup serverName.
+resources:
+    - cluster.yaml
+    - objectstore.yaml
+    - scheduledbackup.yaml
+    - external-secret.yaml

@@ -1,0 +1,19 @@
+# Monthly base backup of cove-db via the Barman Cloud Plugin.
+#
+# WAL is archived continuously (Cluster .spec.plugins isWALArchiver) — this
+# only governs how often a fresh *base* backup is taken. Monthly suits a
+# low-write v1 homelab DB; point-in-time recovery is still possible to any
+# point covered by retained WAL (see the ObjectStore retentionPolicy).
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+    name: cove-db-monthly
+spec:
+    # CNPG uses a 6-field cron (sec min hour dom month dow): 02:00 on the 1st.
+    schedule: "0 0 2 1 * *"
+    backupOwnerReference: self
+    cluster:
+        name: cove-db
+    method: plugin
+    pluginConfiguration:
+        name: barman-cloud.cloudnative-pg.io

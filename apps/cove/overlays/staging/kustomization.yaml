@@ -19,3 +19,18 @@ images:
       newTag: sha-448d6d295133e9ca56ad074ac153f4ed87489edd
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-image
       newTag: sha-448d6d295133e9ca56ad074ac153f4ed87489edd
+
+# Per-env backup serverName so staging/prod don't collide under the one
+# `postgres-backups` Garage bucket (backups live at <destinationPath>/<serverName>/).
+patches:
+    - patch: |-
+          apiVersion: barmancloud.cnpg.io/v1
+          kind: ObjectStore
+          metadata:
+              name: cove-db-backup
+          spec:
+              configuration:
+                  serverName: cove-db-staging
+      target:
+          kind: ObjectStore
+          name: cove-db-backup
