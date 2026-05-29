@@ -32,3 +32,12 @@ spec:
             compression: gzip
         data:
             compression: gzip
+
+    # Garage requires a non-empty AWS region for SigV4 request signing — the
+    # value itself is ignored by Garage, but without it barman-cloud's S3 calls
+    # fail with HTTP 400 on HeadBucket. Same reason imgproxy sets region=garage.
+    # barman-cloud uses boto3, which reads AWS_REGION from the sidecar env.
+    instanceSidecarConfiguration:
+        env:
+            - name: AWS_REGION
+              value: garage
