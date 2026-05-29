@@ -43,11 +43,15 @@ spec:
     # Wire in the Barman Cloud Plugin. isWALArchiver enables continuous WAL
     # archiving (point-in-time recovery); base backups are taken by the
     # ScheduledBackup. barmanObjectName points at the ObjectStore CR.
+    # serverName is the per-cluster backup identity (folder under the bucket) —
+    # it lives here as a plugin parameter, not on the ObjectStore, and is
+    # overridden per env in the overlays (cove-db-staging / cove-db-prod).
     plugins:
         - name: barman-cloud.cloudnative-pg.io
           isWALArchiver: true
           parameters:
               barmanObjectName: cove-db-backup
+              serverName: cove-db
 
     # Expose metrics to kube-prometheus-stack (installed cluster-wide).
     monitoring:
