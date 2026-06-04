@@ -7,5 +7,6 @@ resources:
     - gar-pull-secret.yaml
     - cove-api/
     - cove-image/
+    - cove-item/
     - imgproxy/
     - cove-db/

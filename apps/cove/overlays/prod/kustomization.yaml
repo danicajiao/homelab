@@ -18,6 +18,8 @@ images:
       newTag: sha-448d6d295133e9ca56ad074ac153f4ed87489edd
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-image
       newTag: sha-448d6d295133e9ca56ad074ac153f4ed87489edd
+    - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-item
+      newTag: sha-placeholder
 
 # Override IMGPROXY_BASE_URL for prod — base defaults to the staging URL.
 patches:
@@ -37,6 +39,22 @@ patches:
       target:
           kind: Deployment
           name: cove-image
+    - patch: |-
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+              name: cove-item
+          spec:
+              template:
+                  spec:
+                      containers:
+                          - name: cove-item
+                            env:
+                                - name: IMGPROXY_BASE_URL
+                                  value: "https://api.coveapp.dev/i"
+      target:
+          kind: Deployment
+          name: cove-item
     # Per-env backup serverName (a Barman Cloud Plugin parameter on the Cluster)
     # so staging/prod don't collide under the one `postgres-backups` Garage
     # bucket (backups live at <destinationPath>/<serverName>/).

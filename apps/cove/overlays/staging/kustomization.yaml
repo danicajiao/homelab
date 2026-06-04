@@ -10,15 +10,18 @@ namespace: cove-staging
 resources:
     - ../../base
 
-# Pin services to the most recent successful CI build. Both cove-api and
-# cove-image share the same SHA — they were built together from the Phase 2
-# integration branch via workflow_dispatch (danicajiao/cove#241).
-# Update this tag each time a new build is promoted to staging.
+# Pin services to the most recent successful CI build. cove-api and cove-image
+# share the same SHA (Phase 2 build via danicajiao/cove#241). cove-item was
+# added in Phase 3 (danicajiao/cove#321) and uses sha-placeholder until the
+# first build is promoted to staging.
+# Update all tags each time a new build is promoted to staging.
 images:
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-api
       newTag: sha-448d6d295133e9ca56ad074ac153f4ed87489edd
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-image
       newTag: sha-448d6d295133e9ca56ad074ac153f4ed87489edd
+    - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-item
+      newTag: sha-placeholder
 
 # Per-env backup serverName (a Barman Cloud Plugin parameter on the Cluster) so
 # staging/prod don't collide under the one `postgres-backups` Garage bucket
