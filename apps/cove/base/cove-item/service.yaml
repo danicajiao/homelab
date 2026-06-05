@@ -1,0 +1,15 @@
+# ClusterIP Service for cove-item.
+#
+# cove-item is not exposed publicly — cove-api routes discovery and
+# item/maker/storefront requests to it in-cluster.
+apiVersion: v1
+kind: Service
+metadata:
+    name: cove-item
+spec:
+    selector:
+        app: cove-item
+    ports:
+        - port: 8080
+          targetPort: 8080
+    type: ClusterIP
