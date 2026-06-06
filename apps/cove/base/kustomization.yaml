@@ -8,5 +8,6 @@ resources:
     - cove-api/
     - cove-image/
     - cove-item/
+    - cove-user/
     - imgproxy/
     - cove-db/

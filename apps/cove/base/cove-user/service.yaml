@@ -1,0 +1,15 @@
+# ClusterIP Service for cove-user.
+#
+# cove-user is not exposed publicly — cove-api routes profile, favorites,
+# follows, interests, events, and recommendation requests to it in-cluster.
+apiVersion: v1
+kind: Service
+metadata:
+    name: cove-user
+spec:
+    selector:
+        app: cove-user
+    ports:
+        - port: 8080
+          targetPort: 8080
+    type: ClusterIP

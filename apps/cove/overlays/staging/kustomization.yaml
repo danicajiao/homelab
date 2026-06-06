@@ -22,6 +22,8 @@ images:
       newTag: sha-f20dd7d06e3ae8e59068c5c9712641ca1f00fd5d
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-item
       newTag: sha-f20dd7d06e3ae8e59068c5c9712641ca1f00fd5d
+    - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-user
+      newTag: sha-placeholder
 
 # Per-env backup serverName (a Barman Cloud Plugin parameter on the Cluster) so
 # staging/prod don't collide under the one `postgres-backups` Garage bucket
