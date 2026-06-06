@@ -20,6 +20,8 @@ images:
       newTag: sha-448d6d295133e9ca56ad074ac153f4ed87489edd
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-item
       newTag: sha-placeholder
+    - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-user
+      newTag: sha-placeholder
 
 # Override IMGPROXY_BASE_URL for prod — base defaults to the staging URL.
 patches:

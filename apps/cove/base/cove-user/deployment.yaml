@@ -1,0 +1,64 @@
+# cove-user Deployment.
+#
+# User profile service — handles GET/POST/DELETE /users/me/*, favorites,
+# follows, interests, attention events, and category recommendations.
+# Pure Go, no CGo dependencies.
+#
+# Image tag is intentionally absent — overlays pin their own sha-* tag
+# via the Kustomize `images:` transformer so the base is env-agnostic.
+#
+# Secrets:
+#   - cove-db-app (CNPG-managed): DATABASE_URL for PostgreSQL connection.
+#     cove-user connects as the `app` user for v1; the schema grants to
+#     cove_user are in place for when role separation is enforced.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: cove-user
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: cove-user
+    template:
+        metadata:
+            labels:
+                app: cove-user
+        spec:
+            imagePullSecrets:
+                - name: gar-pull-secret
+            containers:
+                - name: cove-user
+                  image: us-central1-docker.pkg.dev/cove-6a685/services/cove-user
+                  ports:
+                      - containerPort: 8080
+                  env:
+                      - name: PORT
+                        value: "8080"
+                      # PostgreSQL connection — uses the CNPG-managed `app` user secret.
+                      - name: DATABASE_URL
+                        valueFrom:
+                            secretKeyRef:
+                                name: cove-db-app
+                                key: uri
+                  livenessProbe:
+                      httpGet:
+                          path: /health
+                          port: 8080
+                      initialDelaySeconds: 10
+                      periodSeconds: 15
+                      failureThreshold: 3
+                  readinessProbe:
+                      httpGet:
+                          path: /health
+                          port: 8080
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                      failureThreshold: 3
+                  resources:
+                      requests:
+                          cpu: 50m
+                          memory: 64Mi
+                      limits:
+                          cpu: 500m
+                          memory: 256Mi
