@@ -20,6 +20,7 @@ metadata:
     name: cove-item
 spec:
     replicas: 1
+    revisionHistoryLimit: 1
     selector:
         matchLabels:
             app: cove-item
