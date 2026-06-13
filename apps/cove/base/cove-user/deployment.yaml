@@ -17,6 +17,7 @@ metadata:
     name: cove-user
 spec:
     replicas: 1
+    revisionHistoryLimit: 1
     selector:
         matchLabels:
             app: cove-user
