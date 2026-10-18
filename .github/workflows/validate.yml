@@ -22,10 +22,19 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            # kubeconform and the CRD schema catalog are both pinned so upstream
+            # releases can't break validation on unrelated PRs. Bump them
+            # deliberately: update the version + checksum (or catalog SHA) together.
             - name: Install kubeconform
+              env:
+                  KUBECONFORM_VERSION: v0.8.0
+                  KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
               run: |
-                  curl -fsSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
-                  sudo install kubeconform /usr/local/bin/
+                  curl -fsSL -o "$RUNNER_TEMP/kubeconform.tar.gz" \
+                      "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+                  echo "${KUBECONFORM_SHA256}  $RUNNER_TEMP/kubeconform.tar.gz" | sha256sum -c -
+                  tar xzf "$RUNNER_TEMP/kubeconform.tar.gz" -C "$RUNNER_TEMP" kubeconform
+                  sudo install "$RUNNER_TEMP/kubeconform" /usr/local/bin/
                   kubeconform -v
 
             - name: Render and validate every kustomization
@@ -37,7 +46,12 @@ jobs:
                   # https://github.com/datreeio/CRDs-catalog for coverage. Resources
                   # whose schemas are missing are reported as "skipped" — that's a
                   # signal to either find the schema or accept the gap explicitly.
-                  CRD_SCHEMA: "https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+                  #
+                  # Pinned to a catalog commit rather than `main`: datreeio/CRDs-catalog#988
+                  # (2026-10-08) replaced the external-secrets.io schemas with ones
+                  # kubeconform v0.8.0 can't load ("could not find schema for
+                  # ClusterSecretStore"). f3e4382 is the last commit before that change.
+                  CRD_SCHEMA: "https://raw.githubusercontent.com/datreeio/CRDs-catalog/f3e4382095909ac60000da025f323ba44d4c738a/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
               run: |
                   set -euo pipefail
                   failed=0
