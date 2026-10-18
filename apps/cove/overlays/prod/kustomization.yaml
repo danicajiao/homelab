@@ -15,13 +15,13 @@ resources:
 # exists.
 images:
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-api
-      newTag: sha-2437f46693d91b1a6f5e4b6d26b3ca23490c53f7
+      newTag: sha-8cd2105d91a3aa748a2f268adf5a732c91e1acb5
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-image
-      newTag: sha-2437f46693d91b1a6f5e4b6d26b3ca23490c53f7
+      newTag: sha-8cd2105d91a3aa748a2f268adf5a732c91e1acb5
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-item
-      newTag: sha-2437f46693d91b1a6f5e4b6d26b3ca23490c53f7
+      newTag: sha-8cd2105d91a3aa748a2f268adf5a732c91e1acb5
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-user
-      newTag: sha-2437f46693d91b1a6f5e4b6d26b3ca23490c53f7
+      newTag: sha-8cd2105d91a3aa748a2f268adf5a732c91e1acb5
 
 # Override IMGPROXY_BASE_URL for prod — base defaults to the staging URL.
 patches:
