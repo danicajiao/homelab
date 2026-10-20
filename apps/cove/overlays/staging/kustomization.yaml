@@ -17,13 +17,13 @@ resources:
 # Update every tag each time a new build is promoted to staging.
 images:
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-api
-      newTag: sha-8cd2105d91a3aa748a2f268adf5a732c91e1acb5
+      newTag: sha-cd487b3c62cbc749accd0eab3adafd72107d082c
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-image
-      newTag: sha-8cd2105d91a3aa748a2f268adf5a732c91e1acb5
+      newTag: sha-cd487b3c62cbc749accd0eab3adafd72107d082c
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-item
-      newTag: sha-8cd2105d91a3aa748a2f268adf5a732c91e1acb5
+      newTag: sha-cd487b3c62cbc749accd0eab3adafd72107d082c
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-user
-      newTag: sha-8cd2105d91a3aa748a2f268adf5a732c91e1acb5
+      newTag: sha-cd487b3c62cbc749accd0eab3adafd72107d082c
 
 # Per-env backup serverName (a Barman Cloud Plugin parameter on the Cluster) so
 # staging/prod don't collide under the one `postgres-backups` Garage bucket
