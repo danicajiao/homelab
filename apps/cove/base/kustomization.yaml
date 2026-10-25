@@ -6,8 +6,9 @@ kind: Kustomization
 resources:
     - gar-pull-secret.yaml
     - cove-api/
-    - cove-image/
-    - cove-item/
+    - cove-media/
+    - cove-catalog/
+    - cove-directory/
     - cove-user/
     - imgproxy/
     - cove-db/

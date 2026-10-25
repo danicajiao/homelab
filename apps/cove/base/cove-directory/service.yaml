@@ -1,0 +1,15 @@
+# ClusterIP Service for cove-directory.
+#
+# cove-directory is not exposed publicly — cove-api routes producer
+# and place requests to it in-cluster.
+apiVersion: v1
+kind: Service
+metadata:
+    name: cove-directory
+spec:
+    selector:
+        app: cove-directory
+    ports:
+        - port: 8080
+          targetPort: 8080
+    type: ClusterIP

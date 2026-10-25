@@ -1,17 +1,17 @@
-# cove-image Deployment.
+# cove-media Deployment (renamed from cove-image, danicajiao/cove#414).
 #
-# Handles image uploads (multipart → Garage S3) and signs imgproxy URLs
-# for clients. Lightweight Go service — no heavy compute.
+# Handles image uploads (multipart → normalized WebP in Garage S3) and signs
+# imgproxy URLs for clients. Resizing is imgproxy's job, not this service's.
 #
 # Image tag is intentionally absent — overlays pin their own sha-* tag
 # via the Kustomize `images:` transformer so the base is env-agnostic.
 #
-# Secrets: cove-image reuses two secrets already managed by imgproxy's
+# Secrets: cove-media reuses two secrets already managed by imgproxy's
 # ExternalSecrets (external-secret.yaml in the imgproxy/ directory):
 #   - imgproxy-signing-keys: IMGPROXY_KEY and IMGPROXY_SALT
 #   - imgproxy-garage-creds: Garage S3 credentials (stored under AWS_*
 #     key names; remapped to GARAGE_* env var names here)
-# No additional ExternalSecret is needed for cove-image.
+# No additional ExternalSecret is needed for cove-media.
 #
 # IMGPROXY_BASE_URL is the public URL prefix clients use to fetch images
 # (e.g. https://staging-api.coveapp.dev/i). cove-api forwards /i/* to
@@ -19,23 +19,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-    name: cove-image
+    name: cove-media
 spec:
     replicas: 1
     revisionHistoryLimit: 1
     selector:
         matchLabels:
-            app: cove-image
+            app: cove-media
     template:
         metadata:
             labels:
-                app: cove-image
+                app: cove-media
         spec:
             imagePullSecrets:
                 - name: gar-pull-secret
             containers:
-                - name: cove-image
-                  image: us-central1-docker.pkg.dev/cove-6a685/services/cove-image
+                - name: cove-media
+                  image: us-central1-docker.pkg.dev/cove-6a685/services/cove-media
                   ports:
                       - containerPort: 8080
                   env:
