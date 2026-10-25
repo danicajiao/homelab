@@ -3,7 +3,7 @@
 # Runs the OSS imgproxy image (free, MIT licensed). Resizes and re-encodes
 # images on the fly from the Garage `cove-media` S3 bucket. Clients never
 # call imgproxy directly — cove-api routes /i/* to this service, and
-# cove-product generates signed URLs that imgproxy verifies before serving.
+# cove-media, cove-catalog and cove-directory generate signed URLs that imgproxy verifies before serving.
 #
 # Signing keys (IMGPROXY_KEY / IMGPROXY_SALT) and Garage credentials are
 # injected via the ExternalSecret in external-secret.yaml.

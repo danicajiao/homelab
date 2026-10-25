@@ -31,8 +31,9 @@ spec:
     # Create the `cove` database, extensions, and service roles during bootstrap.
     # postInitApplicationSQL runs as superuser — the only place CREATE ROLE and
     # CREATE EXTENSION are permitted. Schemas, tables, and grants are managed by
-    # golang-migrate migrations in danicajiao/cove (services/cove-item/migrations,
-    # services/cove-user/migrations) and run by the app user after bootstrap.
+    # golang-migrate migrations in danicajiao/cove (services/cove-directory,
+    # services/cove-catalog and services/cove-user, run in that order) and run
+    # by the app user after bootstrap.
     # NOTE: postInitApplicationSQL only runs at cluster creation time, not on
     # updates. Changes here only take effect on a fresh cluster.
     bootstrap:
@@ -42,10 +43,12 @@ spec:
             postInitApplicationSQL:
                 - CREATE EXTENSION IF NOT EXISTS postgis;
                 - CREATE EXTENSION IF NOT EXISTS ltree;
-                - DO $$ BEGIN CREATE ROLE cove_item WITH LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+                - DO $$ BEGIN CREATE ROLE cove_catalog WITH LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+                - DO $$ BEGIN CREATE ROLE cove_directory WITH LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
                 - DO $$ BEGIN CREATE ROLE cove_user WITH LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-                - ALTER ROLE cove_item SET search_path = catalog, directory, public;
-                - ALTER ROLE cove_user  SET search_path = profile, public;
+                - ALTER ROLE cove_catalog   SET search_path = catalog, directory, public;
+                - ALTER ROLE cove_directory SET search_path = directory, catalog, public;
+                - ALTER ROLE cove_user      SET search_path = profile, public;
 
     # Wire in the Barman Cloud Plugin. isWALArchiver enables continuous WAL
     # archiving (point-in-time recovery); base backups are taken by the

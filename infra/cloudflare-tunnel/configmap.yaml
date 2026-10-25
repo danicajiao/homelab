@@ -12,8 +12,8 @@
 #   3. Catch-all → 404. Required by cloudflared — every config must end
 #      with a wildcard rule.
 #
-# cove-api is the sole public gateway — all other services (cove-image,
-# cove-product, cove-user) are internal-only and reached via in-cluster
+# cove-api is the sole public gateway — all other services (cove-media,
+# cove-catalog, cove-directory, cove-user) are internal-only and reached via in-cluster
 # DNS from cove-api. No additional CNAMEs or ingress rules are needed as
 # new services are added.
 #

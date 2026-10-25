@@ -5,7 +5,7 @@
 ## What this sets up
 
 - ESO running in the `external-secrets` namespace, installed via the upstream Helm chart at a pinned version
-- A `ClusterSecretStore` named `gcp-cove` pointing at GCP project `cove-6a685`, backing cove-side workloads (Garage bucket creds consumed by cove-image, CNPG-managed cove databases, etc.)
+- A `ClusterSecretStore` named `gcp-cove` pointing at GCP project `cove-6a685`, backing cove-side workloads (Garage bucket creds consumed by cove-media, CNPG-managed cove databases, etc.)
 - A `ClusterSecretStore` named `gcp-homelab` pointing at GCP project `homelab-495921`, backing homelab-only workloads (Minecraft today; Cloudflare Tunnel + Grafana when those land)
 - Two bootstrap K8s `Secret`s holding each project's service account JSON key — `gcp-sm-credentials` (cove) and `gcp-homelab-credentials` (homelab). Both are created out-of-band by this runbook, **not** committed to git
 - A smoke-test `ExternalSecret` (against `gcp-cove`) that pulls a throwaway value from GCP Secret Manager to prove the wiring end-to-end
@@ -18,7 +18,7 @@ The rule is **consumer-owns**: a secret lives in the GCP project of the *workloa
 
 | Example secret | Consumer | Project | Store |
 |---|---|---|---|
-| `garage-cove-media-access-key` (S3 key for the `cove-media` bucket) | cove-image, CNPG `Cluster` resources for cove DBs | `cove-6a685` | `gcp-cove` |
+| `garage-cove-media-access-key` (S3 key for the `cove-media` bucket) | cove-media, CNPG `Cluster` resources for cove DBs | `cove-6a685` | `gcp-cove` |
 | `garage-postgres-backups-*-key` | CNPG cluster running cove's database | `cove-6a685` | `gcp-cove` |
 | `cove-api-firebase-service-account` (Firebase Admin SDK creds for cove-api) | `cove-api` in the `cove-staging` / `cove-prod` namespaces | `cove-6a685` | `gcp-cove` |
 | `minecraft-curseforge-api-key` | Minecraft server in the `gaming` namespace | `homelab-495921` | `gcp-homelab` |

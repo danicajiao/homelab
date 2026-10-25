@@ -62,7 +62,7 @@ spec:
                           # recent K3s).
                           size: 20Gi
                   service:
-                      # In-cluster only. Future imgproxy / cove-image / CNPG
+                      # In-cluster only. imgproxy / cove-media / CNPG
                       # backups all dial `garage.garage.svc.cluster.local:3900`.
                       # No ingress in Phase 0; admin API stays off the network.
                       type: ClusterIP

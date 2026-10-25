@@ -4,8 +4,8 @@
 # the Cloudflare Tunnel pod is the only legitimate external caller in
 # Phase 1. All other ingress is denied by default.
 #
-# In Phase 2+ this policy grows: downstream services (cove-image,
-# cove-product, cove-user) will each have their own NetworkPolicy that
+# In Phase 2+ this policy grows: downstream services (cove-media,
+# cove-catalog, cove-directory, cove-user) will each have their own NetworkPolicy that
 # only accepts traffic from cove-api, mirroring the X-Cove-Uid header
 # trust model described in docs/BACKEND_INFRASTRUCTURE.md.
 #

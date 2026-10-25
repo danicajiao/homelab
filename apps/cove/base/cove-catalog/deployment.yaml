@@ -1,39 +1,39 @@
-# cove-item Deployment.
+# cove-catalog Deployment (split from cove-item, danicajiao/cove#413).
 #
-# Discovery surface service — handles GET /discovery, /categories,
-# /items/:id, /makers/:id, /storefronts/:id. Pure Go, no CGo dependencies.
+# Catalog service — owns the catalog schema and handles GET /discovery,
+# /categories and /items/:id. Pure Go, no CGo dependencies.
 #
 # Image tag is intentionally absent — overlays pin their own sha-* tag
 # via the Kustomize `images:` transformer so the base is env-agnostic.
 #
 # Secrets:
 #   - cove-db-app (CNPG-managed): DATABASE_URL for PostgreSQL connection.
-#     cove-item connects as the `app` user for v1; the schema grants to
-#     cove_item are in place for when role separation is enforced.
+#     cove-catalog connects as the `app` user for v1; the schema grants to
+#     cove_catalog are in place for when role separation is enforced.
 #   - imgproxy-signing-keys: IMGPROXY_KEY and IMGPROXY_SALT for signing
-#     variant URLs. Reuses the same secret as cove-image.
+#     variant URLs. Reuses the same secret as cove-media.
 #
 # IMGPROXY_BASE_URL defaults to staging; the prod overlay patches it.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-    name: cove-item
+    name: cove-catalog
 spec:
     replicas: 1
     revisionHistoryLimit: 1
     selector:
         matchLabels:
-            app: cove-item
+            app: cove-catalog
     template:
         metadata:
             labels:
-                app: cove-item
+                app: cove-catalog
         spec:
             imagePullSecrets:
                 - name: gar-pull-secret
             containers:
-                - name: cove-item
-                  image: us-central1-docker.pkg.dev/cove-6a685/services/cove-item
+                - name: cove-catalog
+                  image: us-central1-docker.pkg.dev/cove-6a685/services/cove-catalog
                   ports:
                       - containerPort: 8080
                   env:
@@ -45,7 +45,7 @@ spec:
                             secretKeyRef:
                                 name: cove-db-app
                                 key: uri
-                      # imgproxy URL signing — same keys as cove-image.
+                      # imgproxy URL signing — same keys as cove-media.
                       - name: IMGPROXY_KEY
                         valueFrom:
                             secretKeyRef:

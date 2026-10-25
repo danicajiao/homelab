@@ -1,0 +1,84 @@
+# cove-directory Deployment (split from cove-item, danicajiao/cove#413).
+#
+# Directory service — owns the directory schema and handles
+# GET /producers/:id and /places/:id. Pure Go, no CGo dependencies.
+#
+# Image tag is intentionally absent — overlays pin their own sha-* tag
+# via the Kustomize `images:` transformer so the base is env-agnostic.
+#
+# Secrets:
+#   - cove-db-app (CNPG-managed): DATABASE_URL for PostgreSQL connection.
+#     cove-directory connects as the `app` user for v1; the schema grants to
+#     cove_directory are in place for when role separation is enforced.
+#   - imgproxy-signing-keys: IMGPROXY_KEY and IMGPROXY_SALT for signing
+#     variant URLs. Reuses the same secret as cove-media.
+#
+# IMGPROXY_BASE_URL defaults to staging; the prod overlay patches it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: cove-directory
+spec:
+    replicas: 1
+    revisionHistoryLimit: 1
+    selector:
+        matchLabels:
+            app: cove-directory
+    template:
+        metadata:
+            labels:
+                app: cove-directory
+        spec:
+            imagePullSecrets:
+                - name: gar-pull-secret
+            containers:
+                - name: cove-directory
+                  image: us-central1-docker.pkg.dev/cove-6a685/services/cove-directory
+                  ports:
+                      - containerPort: 8080
+                  env:
+                      - name: PORT
+                        value: "8080"
+                      # PostgreSQL connection — uses the CNPG-managed `app` user secret.
+                      - name: DATABASE_URL
+                        valueFrom:
+                            secretKeyRef:
+                                name: cove-db-app
+                                key: uri
+                      # imgproxy URL signing — same keys as cove-media.
+                      - name: IMGPROXY_KEY
+                        valueFrom:
+                            secretKeyRef:
+                                name: imgproxy-signing-keys
+                                key: IMGPROXY_KEY
+                      - name: IMGPROXY_SALT
+                        valueFrom:
+                            secretKeyRef:
+                                name: imgproxy-signing-keys
+                                key: IMGPROXY_SALT
+                      # Public-facing imgproxy URL prefix. Prod overlay patches this.
+                      - name: IMGPROXY_BASE_URL
+                        value: "https://staging-api.coveapp.dev/i"
+                      - name: IMGPROXY_BUCKET
+                        value: "cove-media"
+                  livenessProbe:
+                      httpGet:
+                          path: /health
+                          port: 8080
+                      initialDelaySeconds: 10
+                      periodSeconds: 15
+                      failureThreshold: 3
+                  readinessProbe:
+                      httpGet:
+                          path: /health
+                          port: 8080
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                      failureThreshold: 3
+                  resources:
+                      requests:
+                          cpu: 50m
+                          memory: 64Mi
+                      limits:
+                          cpu: 500m
+                          memory: 256Mi
