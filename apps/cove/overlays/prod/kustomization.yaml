@@ -14,20 +14,20 @@ resources:
 # Keep in sync with the staging overlay until a formal promotion workflow
 # exists.
 # cove-media, cove-catalog and cove-directory replaced cove-image and cove-item
-# (danicajiao/cove#413, #414, #416). Their sha-placeholder tags are set to the
-# first integration-branch build during the cutover (danicajiao/cove#400);
-# CI's bump job rewrites every newTag line after that.
+# (danicajiao/cove#413, #414, #416). The cutover (danicajiao/cove#400) pinned
+# both overlays to the integration-branch build; CI's bump job rewrites every
+# newTag line after that.
 images:
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-api
-      newTag: sha-d453f0c827820d771578f26ba4d105e75d69e8e6
+      newTag: sha-0a1782211d1a91362c25f307c20d827a78ec0659
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-media
-      newTag: sha-placeholder
+      newTag: sha-0a1782211d1a91362c25f307c20d827a78ec0659
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-catalog
-      newTag: sha-placeholder
+      newTag: sha-0a1782211d1a91362c25f307c20d827a78ec0659
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-directory
-      newTag: sha-placeholder
+      newTag: sha-0a1782211d1a91362c25f307c20d827a78ec0659
     - name: us-central1-docker.pkg.dev/cove-6a685/services/cove-user
-      newTag: sha-d453f0c827820d771578f26ba4d105e75d69e8e6
+      newTag: sha-0a1782211d1a91362c25f307c20d827a78ec0659
 
 # Override IMGPROXY_BASE_URL for prod — base defaults to the staging URL.
 patches:
