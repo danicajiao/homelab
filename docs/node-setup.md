@@ -146,6 +146,30 @@ The Tailscale IP is added as a TLS SAN so kubectl can connect via Tailscale with
 
 ---
 
+## AppArmor: containerd profile
+
+k3s's containerd confines every container with its built-in AppArmor profile, `cri-containerd.apparmor.d`. Since Ubuntu kernel **7.0.0-41**, that profile denies signals between processes in the same container: a kernel security fix ([CVE-2026-90231](https://ubuntu.com/security/CVE-2026-90231)) combined with Ubuntu's default `kernel.apparmor_restrict_unprivileged_unconfined=1` labels container processes `cri-containerd.apparmor.d//&unconfined`, and the built-in rule only allows the plain name. Postgres can't run without those signals, so both `cove-db` clusters crash-looped on `could not signal for checkpoint: Permission denied` after the node booted 7.0.0-42 (November 2026).
+
+The fix is a copy of containerd's profile with the stacked label added to its two same-container rules, kept in this repo at [`node/etc/apparmor.d/cri-containerd.apparmor.d`](../node/etc/apparmor.d/cri-containerd.apparmor.d). AppArmor stays enforcing and the kernel and sysctl stay at Ubuntu's defaults. `apparmor.service` loads the file at boot, and containerd skips loading its own version when a profile with that name is already loaded.
+
+Install or update it:
+
+```bash
+scp node/etc/apparmor.d/cri-containerd.apparmor.d homelab-ts:/tmp/
+ssh homelab-ts 'sudo install -m 0644 /tmp/cri-containerd.apparmor.d /etc/apparmor.d/ \
+  && sudo apparmor_parser -r -W /etc/apparmor.d/cri-containerd.apparmor.d'
+```
+
+The reload applies to running containers. A pod that was crash-looping recovers at its next restart.
+
+Check for denials:
+
+```bash
+ssh homelab-ts 'sudo journalctl -k --since "10 min ago" | grep "apparmor=\"DENIED\"" | grep "operation=\"signal\""'
+```
+
+Remove the file and reboot once a k3s release ships containerd with the upstream fix ([containerd/containerd#14485](https://github.com/containerd/containerd/issues/14485); Ubuntu [LP #2172422](https://bugs.launchpad.net/ubuntu/+source/linux/+bug/2172422)). If k3s upgrades containerd before then, compare the file against the new `contrib/apparmor/template.go` and carry over any changes.
+
 ## Tailscale
 
 | Device              | Tailscale IP    |
