@@ -1,0 +1,56 @@
+# cove-user guest cleanup (danicajiao/cove#436).
+#
+# Runs `cove-user cleanup-guests` once a day. It deletes guest profiles (anonymous
+# sign-ins) that haven't made a request in 30 days, along with their interests
+# and activity, then exits. It uses the cove-user image and DATABASE_URL, so the
+# overlays' `images:` tag for cove-user applies here too.
+#
+# Needs cove-user's migration 000003 (profile.users.last_seen_at) in the target
+# database and an image built from danicajiao/cove#436 or later. An older image
+# ignores the argument and starts the HTTP server instead, so
+# activeDeadlineSeconds stops the Job rather than letting it run forever. The
+# prod overlay keeps this suspended until prod runs that image and migration.
+#
+# The pod label is deliberately not `app: cove-user`, so the cove-user Service
+# never routes traffic to a cleanup pod.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+    name: cove-user-cleanup-guests
+spec:
+    schedule: "30 3 * * *"
+    timeZone: America/Denver
+    concurrencyPolicy: Forbid
+    startingDeadlineSeconds: 3600
+    successfulJobsHistoryLimit: 1
+    failedJobsHistoryLimit: 3
+    jobTemplate:
+        spec:
+            backoffLimit: 2
+            activeDeadlineSeconds: 300
+            template:
+                metadata:
+                    labels:
+                        app: cove-user-cleanup-guests
+                spec:
+                    restartPolicy: Never
+                    imagePullSecrets:
+                        - name: gar-pull-secret
+                    containers:
+                        - name: cleanup-guests
+                          image: us-central1-docker.pkg.dev/cove-6a685/services/cove-user
+                          args: ["cleanup-guests"]
+                          env:
+                              # Same CNPG-managed `app` user secret as the Deployment.
+                              - name: DATABASE_URL
+                                valueFrom:
+                                    secretKeyRef:
+                                        name: cove-db-app
+                                        key: uri
+                          resources:
+                              requests:
+                                  cpu: 10m
+                                  memory: 32Mi
+                              limits:
+                                  cpu: 200m
+                                  memory: 64Mi
