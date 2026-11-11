@@ -31,19 +31,6 @@ images:
 
 # Override IMGPROXY_BASE_URL for prod — base defaults to the staging URL.
 patches:
-    # Guest cleanup stays off in prod until prod runs a cove-user image with
-    # `cleanup-guests` and has migration 000003 (danicajiao/cove#436). Remove
-    # this patch when the guest browsing epic (danicajiao/cove#430) is promoted.
-    - patch: |-
-          apiVersion: batch/v1
-          kind: CronJob
-          metadata:
-              name: cove-user-cleanup-guests
-          spec:
-              suspend: true
-      target:
-          kind: CronJob
-          name: cove-user-cleanup-guests
     - patch: |-
           apiVersion: apps/v1
           kind: Deployment
